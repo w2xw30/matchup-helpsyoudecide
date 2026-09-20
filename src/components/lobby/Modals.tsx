@@ -36,6 +36,7 @@ function InviteBody({ lobby, onClose }: { lobby: Lobby; onClose: () => void }) {
   const cancel = useStore((s) => s.cancelInvite);
   const regen = useStore((s) => s.regenerateCode);
   const admin = isAdmin(lobby);
+  const friends = useStore((s) => s.friends).filter((f) => f.status === "friend");
   const [tab, setTab] = useState<"share" | "people">("share");
   const [qr, setQr] = useState("");
   const [who, setWho] = useState("");
@@ -180,6 +181,35 @@ function InviteBody({ lobby, onClose }: { lobby: Lobby; onClose: () => void }) {
             <p className="sheet-note">Only lobby admins can invite people by name. Share the link or QR instead.</p>
           )}
           {err && <p className="field-error">{err}</p>}
+          {admin && friends.length > 0 && (
+            <>
+              <h4 className="sheet-h4">Your friends</h4>
+              <div className="pick-list">
+                {friends.map((f) => {
+                  const first = f.name.split(" ")[0].toLowerCase();
+                  const already =
+                    lobby.members.some((m) => m.name.toLowerCase() === first) || lobby.invites.some((i) => i.to.toLowerCase() === f.handle.toLowerCase());
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className={`pick ${already ? "on" : ""}`}
+                      disabled={already}
+                      onClick={() => {
+                        const r = invite(lobby.id, f.handle);
+                        if (r === "ok") toast(`Invite sent to ${f.name}`);
+                        else if (r === "full") setErr("This lobby is full. Raise the member limit in Lobby Settings.");
+                      }}
+                    >
+                      <Avatar src={f.avatar} name={f.name} size={30} />
+                      <span>{f.name}</span>
+                      {already ? <span className="pick-note">In lobby</span> : <span className="pick-note">Invite</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
           <h4 className="sheet-h4">Pending invites ({lobby.invites.length})</h4>
           {lobby.invites.length === 0 ? (
             <p className="sheet-note">No pending invites.</p>

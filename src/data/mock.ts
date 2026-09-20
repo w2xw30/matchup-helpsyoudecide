@@ -68,6 +68,24 @@ export interface Lobby {
   createdAt: number;
 }
 
+export interface Friend {
+  id: string;
+  name: string;
+  handle: string;
+  avatar?: string;
+  status: "friend" | "pending";
+  addedAt: number;
+}
+export interface Clan {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  /** friend ids — the current user is always the owner and is implicit */
+  memberIds: string[];
+  createdAt: number;
+}
+
 export const DEFAULT_LOBBY_ID = "friday-night-42x9";
 export const GAMERS_LOBBY_ID = "weekend-gamers-7kq2";
 
@@ -235,4 +253,15 @@ export const faqs = [
   { q: "What does 'Required Matches' mean?", a: "It is how much of the group must say yes for something to count as a match. 100% means a unanimous match." },
   { q: "Can I change my vote?", a: "Yes. Use the undo button on the voting screen to step back to your previous card before the deadline." },
   { q: "How do I delete my account?", a: "Go to Settings → Account & Privacy → Delete Account. This permanently removes your data and cannot be undone." },
+];
+
+export const seedFriends = (): Friend[] => [
+  { id: "f-alex", name: "Alex Morgan", handle: "alex.morgan@example.com", avatar: av(2), status: "friend", addedAt: T0 },
+  { id: "f-priya", name: "Priya Patel", handle: "priya@example.com", avatar: av(5), status: "friend", addedAt: T0 + 1 },
+  { id: "f-jordan", name: "Jordan Smith", handle: "jordan@example.com", avatar: av(3), status: "friend", addedAt: T0 + 2 },
+  { id: "f-sam", name: "Sam Lee", handle: "sam@example.com", avatar: av(4), status: "friend", addedAt: T0 + 3 },
+];
+
+export const seedClans = (): Clan[] => [
+  { id: "clan-weekend", name: "Weekend Crew", emoji: "🏕️", description: "The usual suspects.", memberIds: ["f-alex", "f-priya", "f-jordan"], createdAt: T0 },
 ];

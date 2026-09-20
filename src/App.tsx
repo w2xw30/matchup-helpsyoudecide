@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useStore } from "./store/useStore";
 import { AppShell } from "./components/layout/Layout";
 import { Login, Signup } from "./pages/Auth";
@@ -11,14 +11,8 @@ import { Customize } from "./pages/Customize";
 import { Result, Vote } from "./pages/Vote";
 import { Notifications } from "./pages/Notifications";
 import { Settings } from "./pages/Settings";
-import { About, Activity, Faq, Groups, NotFound, Privacy, Security, Support, Visibility } from "./pages/Extra";
-
-function RequireAuth() {
-  const user = useStore((s) => s.user);
-  const loc = useLocation();
-  if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />;
-  return <Outlet />;
-}
+import { Groups } from "./pages/Groups";
+import { About, Activity, Faq, NotFound, Privacy, Security, Support, Visibility } from "./pages/Extra";
 
 function ThemeSync() {
   const theme = useStore((s) => s.theme);
@@ -29,6 +23,18 @@ function ThemeSync() {
   return null;
 }
 
+/** Pages that only make sense for a real account (password, etc.) send guests to log in first. */
+function AccountOnly({ children }: { children: React.ReactNode }) {
+  const guest = useStore((s) => s.user.guest);
+  const loc = useLocation();
+  if (guest) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+  return <>{children}</>;
+}
+
+/**
+ * Everything is open: people can land on Home, hop into a lobby and leave without an account.
+ * Logging in is optional and only adds a name/profile (and, once there's a backend, sync across devices).
+ */
 export default function App() {
   return (
     <BrowserRouter>
@@ -37,26 +43,28 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        <Route element={<RequireAuth />}>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/lobby/new" element={<CreateLobby />} />
-            <Route path="/join" element={<Join />} />
-            <Route path="/join/:id" element={<Invite />} />
-            <Route path="/groups" element={<Groups />} />
-            <Route path="/lobby/:id" element={<LobbyPage />} />
-            <Route path="/lobby/:id/customize" element={<Customize />} />
-            <Route path="/session/:id/vote" element={<Vote />} />
-            <Route path="/session/:id/result" element={<Result />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/settings/security" element={<Security />} />
-            <Route path="/settings/visibility" element={<Visibility />} />
-            <Route path="/activity" element={<Activity />} />
-          </Route>
-        </Route>
-
         <Route element={<AppShell />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/lobby/new" element={<CreateLobby />} />
+          <Route path="/join" element={<Join />} />
+          <Route path="/join/:id" element={<Invite />} />
+          <Route path="/groups" element={<Groups />} />
+          <Route path="/lobby/:id" element={<LobbyPage />} />
+          <Route path="/lobby/:id/customize" element={<Customize />} />
+          <Route path="/session/:id/vote" element={<Vote />} />
+          <Route path="/session/:id/result" element={<Result />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route
+            path="/settings/security"
+            element={
+              <AccountOnly>
+                <Security />
+              </AccountOnly>
+            }
+          />
+          <Route path="/settings/visibility" element={<Visibility />} />
+          <Route path="/activity" element={<Activity />} />
           <Route path="/about" element={<About />} />
           <Route path="/faq" element={<Faq />} />
           <Route path="/privacy" element={<Privacy />} />

@@ -37,7 +37,7 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  if (user) return <Navigate to={from} replace />;
+  if (!user.guest) return <Navigate to={from} replace />;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -103,6 +103,9 @@ export function Login() {
         <p className="auth-foot">
           Don't have an account? <Link to="/signup">Create an account</Link>
         </p>
+        <Link to="/" className="auth-skip">
+          Continue as guest
+        </Link>
       </form>
     </AuthShell>
   );
@@ -118,7 +121,7 @@ export function Signup() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
 
-  if (user) return <Navigate to="/" replace />;
+  if (!user.guest) return <Navigate to="/" replace />;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -155,6 +158,9 @@ export function Signup() {
         <p className="auth-foot">
           Already have an account? <Link to="/login">Log in</Link>
         </p>
+        <Link to="/" className="auth-skip">
+          Continue as guest
+        </Link>
       </form>
     </AuthShell>
   );

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Compass, Globe, LogOut, Mail, Moon, Plus, Settings, Share2, Sun, UserRound, Users } from "lucide-react";
+import { Bell, Compass, Globe, LogIn, LogOut, Mail, Moon, Plus, Settings, Share2, Sun, UserRound, Users } from "lucide-react";
 import { useStore } from "../../store/useStore";
 import { useUI } from "../../store/ui";
-import { Avatar, ConfirmCard, LinkButton, ToastHost } from "../ui/ui";
+import { Avatar, ConfirmCard, ToastHost } from "../ui/ui";
 
 const homeish = (p: string) => p === "/" || p.startsWith("/join") && !/^\/join\/.+/.test(p) || p.startsWith("/activity");
 const groupish = (p: string) =>
@@ -51,56 +51,56 @@ export function Navbar() {
           </Link>
         </div>
         <div className="nav-right">
-          {user ? (
-            <>
-              <Link to="/lobby/new" className="nav-new">
-                <Plus size={16} strokeWidth={2.4} /> <span>New lobby</span>
-              </Link>
-              <Link to="/notifications" className="nav-bell" aria-label={unread ? "Notifications (unread)" : "Notifications"}>
-                <Bell size={18} />
-                {unread && <span className="nav-bell-dot" />}
-              </Link>
-              <div className="nav-user" ref={menuRef}>
-                <button type="button" className="nav-avatar" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu} aria-label="Account menu">
-                  <Avatar src={user.avatar} name={user.name} size={32} />
+          {user.guest && (
+            <Link to="/login" state={{ from: pathname }} className="btn btn-primary btn-sm btn-pill nav-login">
+              Log in
+            </Link>
+          )}
+          <Link to="/notifications" className="nav-bell" aria-label={unread ? "Notifications (unread)" : "Notifications"}>
+            <Bell size={18} />
+            {unread && <span className="nav-bell-dot" />}
+          </Link>
+          <div className="nav-user" ref={menuRef}>
+            <button type="button" className="nav-avatar" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu} aria-label="Account menu">
+              <Avatar src={user.avatar} name={user.name} size={32} />
+            </button>
+            {menu && (
+              <div className="menu" role="menu">
+                <div className="menu-head">
+                  <strong>{user.name}</strong>
+                  <span>{user.guest ? "Browsing as a guest" : user.email}</span>
+                </div>
+                <button role="menuitem" onClick={() => nav("/lobby/new")}>
+                  <Plus size={16} /> Create lobby
                 </button>
-                {menu && (
-                  <div className="menu" role="menu">
-                    <div className="menu-head">
-                      <strong>{user.name}</strong>
-                      <span>{user.email}</span>
-                    </div>
-                    <button role="menuitem" onClick={() => nav("/lobby/new")}>
-                      <Plus size={16} /> Create lobby
-                    </button>
-                    <button role="menuitem" onClick={() => nav("/settings")}>
-                      <Settings size={16} /> Settings
-                    </button>
-                    <button role="menuitem" onClick={() => nav("/notifications")}>
-                      <Bell size={16} /> Notifications
-                    </button>
-                    <button role="menuitem" onClick={toggleTheme}>
-                      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />} {theme === "dark" ? "Light" : "Dark"} mode
-                    </button>
-                    <button
-                      role="menuitem"
-                      className="danger"
-                      onClick={() => {
-                        setMenu(false);
-                        setLogoutOpen(true);
-                      }}
-                    >
-                      <LogOut size={16} /> Logout
-                    </button>
-                  </div>
+                <button role="menuitem" onClick={() => nav("/settings")}>
+                  <Settings size={16} /> Settings
+                </button>
+                <button role="menuitem" onClick={() => nav("/notifications")}>
+                  <Bell size={16} /> Notifications
+                </button>
+                <button role="menuitem" onClick={toggleTheme}>
+                  {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />} {theme === "dark" ? "Light" : "Dark"} mode
+                </button>
+                {user.guest ? (
+                  <button role="menuitem" onClick={() => nav("/login", { state: { from: pathname } })}>
+                    <LogIn size={16} /> Log in or sign up
+                  </button>
+                ) : (
+                  <button
+                    role="menuitem"
+                    className="danger"
+                    onClick={() => {
+                      setMenu(false);
+                      setLogoutOpen(true);
+                    }}
+                  >
+                    <LogOut size={16} /> Logout
+                  </button>
                 )}
               </div>
-            </>
-          ) : (
-            <LinkButton to="/login" size="sm" pill>
-              Log in
-            </LinkButton>
-          )}
+            )}
+          </div>
         </div>
       </nav>
     </header>
@@ -190,7 +190,7 @@ export function LogoutHost() {
       onConfirm={() => {
         setOpen(false);
         logout();
-        nav("/login");
+        nav("/");
       }}
     />
   );

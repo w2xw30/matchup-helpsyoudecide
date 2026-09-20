@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, type LinkProps } from "react-router-dom";
-import { Check, Eye, EyeOff, TriangleAlert, X } from "lucide-react";
+import { Check, Eye, EyeOff, TriangleAlert, User, X } from "lucide-react";
 import { useStore } from "../../store/useStore";
 
 /* ---------- Button ---------- */
@@ -51,7 +51,7 @@ export function Avatar({
         <img src={src} alt={name} onError={() => setBad(true)} />
       ) : (
         <span className="avatar-fallback" style={{ fontSize: size * 0.36 }}>
-          {initials}
+          {initials || <User size={size * 0.5} />}
         </span>
       )}
       {status && <span className={`avatar-dot dot-${status}`} />}

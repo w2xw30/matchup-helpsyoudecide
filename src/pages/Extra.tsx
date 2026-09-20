@@ -1,81 +1,10 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, Globe, Lock, MonitorSmartphone, Plus, Smartphone, TrendingUp, Users, Zap } from "lucide-react";
-import { av, recents } from "../data/mock";
-import { isMember, myRole, roleLabel } from "../lib/perms";
+import { ArrowLeft, ChevronDown, Globe, Lock, MonitorSmartphone, Smartphone, TrendingUp, Users, Zap } from "lucide-react";
+import { isMember } from "../lib/perms";
 import { useStore } from "../store/useStore";
-import { Avatar, AvatarStack, Button, Chip, ConfirmCard, LinkButton, TextField, Toggle } from "./../components/ui/ui";
+import { Button, Chip, ConfirmCard, LinkButton, TextField, Toggle } from "./../components/ui/ui";
 import { faqs } from "../data/mock";
-
-/* ---------------- Groups ---------------- */
-export function Groups() {
-  const lobbyMap = useStore((s) => s.lobbies);
-  const lobbies = useMemo(
-    () => Object.values(lobbyMap).filter((l) => isMember(l)).sort((a, b) => b.createdAt - a.createdAt),
-    [lobbyMap],
-  );
-  return (
-    <div className="doc-wide">
-      <div className="page-head">
-        <div>
-          <h1>Your Groups</h1>
-          <p>Jump back into a lobby, or start a fresh session with your crew.</p>
-        </div>
-        <div className="page-head-actions">
-          <LinkButton to="/join" variant="soft" pill>
-            Join Session <Zap size={15} />
-          </LinkButton>
-          <LinkButton to="/lobby/new" pill>
-            <Plus size={16} /> New lobby
-          </LinkButton>
-        </div>
-      </div>
-      {lobbies.length === 0 && (
-        <div className="empty-state">
-          <Users size={28} />
-          <p>You're not in any lobbies yet.</p>
-          <LinkButton to="/lobby/new" pill>
-            Create your first lobby
-          </LinkButton>
-        </div>
-      )}
-      <div className="group-grid">
-        {lobbies.map((l) => {
-          const ready = l.ready.length;
-          const role = myRole(l)!;
-          return (
-            <article key={l.id} className="tpl-card group-card">
-              <div className="tpl-top">
-                <span className={`pill ${ready >= l.members.length ? "pill-yellow" : "pill-gray"}`}>
-                  {ready >= l.members.length ? "ALL READY" : `${ready}/${l.members.length} READY`}
-                </span>
-                <span className={`role-badge role-${role}`}>{roleLabel(role)}</span>
-              </div>
-              <h3>
-                <span aria-hidden>{l.emoji}</span> {l.name}
-              </h3>
-              <p>
-                {l.items.length} options · {l.members.length} {l.members.length === 1 ? "member" : "members"}
-              </p>
-              <AvatarStack avatars={l.members.filter((m) => m.avatar).slice(0, 4).map((m) => m.avatar!)} extra={`${l.members.length}`} size={28} />
-              <div className="group-actions">
-                <Link to={`/lobby/${l.id}`} className="tpl-create">
-                  Open lobby
-                </Link>
-                <Link to={`/session/${l.id}/vote`} className="tpl-create alt">
-                  Vote
-                </Link>
-                <Link to={`/lobby/${l.id}/customize`} className="tpl-create alt">
-                  Options
-                </Link>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /* ---------------- Activity ---------------- */
 const TABS = [
@@ -86,6 +15,8 @@ const TABS = [
 
 export function Activity() {
   const [params, setParams] = useSearchParams();
+  const lobbyMap = useStore((s) => s.lobbies);
+  const mine = useMemo(() => Object.values(lobbyMap).filter(isMember).sort((x, y) => y.createdAt - x.createdAt), [lobbyMap]);
   const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "recent") as (typeof TABS)[number]["id"];
   return (
     <div className="doc-wide">
@@ -105,29 +36,19 @@ export function Activity() {
 
       {tab === "recent" && (
         <div className="recents-card wide">
-          {recents.map((r) => (
-            <Link key={r.id} to={`/lobby/${r.lobbyId}`} className="recent-row">
-              <span className="recent-avatars">
-                {r.avatars.map((a, i) => (
-                  <Avatar key={i} src={a} size={34} className="stack-item" />
-                ))}
+          {mine.length === 0 && <p className="empty pad">No lobbies yet — create one and it will show up here.</p>}
+          {mine.map((l) => (
+            <Link key={l.id} to={`/lobby/${l.id}`} className="recent-row">
+              <span className="emoji-big sm" aria-hidden>
+                {l.emoji}
               </span>
               <span className="recent-text">
-                <strong>{r.title}</strong>
-                <small>{r.meta}</small>
+                <strong>{l.name}</strong>
+                <small>
+                  {l.items.length} options • {l.members.length} {l.members.length === 1 ? "member" : "members"}
+                </small>
               </span>
             </Link>
-          ))}
-          {["Sunday Brunch Club", "Movie Marathon Crew", "Board Game Bandits"].map((t, i) => (
-            <div key={t} className="recent-row static">
-              <span className="recent-avatars">
-                <Avatar src={av(i + 5)} size={34} className="stack-item" />
-              </span>
-              <span className="recent-text">
-                <strong>{t}</strong>
-                <small>{i + 1} WEEKS AGO • {6 + i * 2} PARTICIPANTS</small>
-              </span>
-            </div>
           ))}
         </div>
       )}

@@ -1,12 +1,12 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Camera, ChevronRight, Eye, Lock, LogOut, Shield, SlidersHorizontal, Trash2, User } from "lucide-react";
+import { Camera, ChevronRight, Eye, Lock, LogIn, LogOut, Shield, SlidersHorizontal, Trash2, User } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { useUI } from "../store/ui";
 import { Avatar, Button, ConfirmCard, LinkButton, TextField, Toggle } from "../components/ui/ui";
 
 export function Settings() {
-  const user = useStore((s) => s.user)!;
+  const user = useStore((s) => s.user);
   const settings = useStore((s) => s.settings);
   const theme = useStore((s) => s.theme);
   const updateProfile = useStore((s) => s.updateProfile);
@@ -45,6 +45,23 @@ export function Settings() {
         <h1>Settings</h1>
         <p>Manage your account and preferences for the ultimate Matchup experience.</p>
       </div>
+
+      {user.guest && (
+        <div className="guest-banner">
+          <div>
+            <strong>You're browsing as a guest</strong>
+            <p>Everything works without an account. Log in to put your name on lobbies and keep your profile.</p>
+          </div>
+          <span className="guest-actions">
+            <LinkButton to="/login" state={{ from: "/settings" }} size="sm" pill>
+              Log in
+            </LinkButton>
+            <LinkButton to="/signup" variant="soft" size="sm" pill>
+              Sign up
+            </LinkButton>
+          </span>
+        </div>
+      )}
 
       <div className="settings-grid">
         <div className="settings-left">
@@ -85,9 +102,9 @@ export function Settings() {
                 <Shield size={16} className="accent" fill="currentColor" /> Account &amp; Privacy
               </span>
             </div>
-            <Row to="/settings/security" icon={<Lock size={18} />} title="Password & Security" sub="Update your password and 2FA" />
+            {!user.guest && <Row to="/settings/security" icon={<Lock size={18} />} title="Password & Security" sub="Update your password and 2FA" />}
             <Row to="/settings/visibility" icon={<Eye size={18} />} title="Profile Visibility" sub="Who can see your polls and groups" />
-            <Row danger onClick={() => setDelOpen(true)} icon={<Trash2 size={18} />} title="Delete Account" sub="Permanently remove your data" />
+            <Row danger onClick={() => setDelOpen(true)} icon={<Trash2 size={18} />} title={user.guest ? "Reset Guest Data" : "Delete Account"} sub={user.guest ? "Clear lobbies and settings on this device" : "Permanently remove your data"} />
           </section>
         </div>
 
@@ -111,9 +128,15 @@ export function Settings() {
             </LinkButton>
           </section>
 
-          <button type="button" className="logout-btn" onClick={() => setLogoutOpen(true)}>
-            <LogOut size={17} /> Logout
-          </button>
+          {user.guest ? (
+            <LinkButton to="/login" state={{ from: "/settings" }} variant="soft" block className="logout-btn">
+              <LogIn size={17} /> Log in or sign up
+            </LinkButton>
+          ) : (
+            <button type="button" className="logout-btn" onClick={() => setLogoutOpen(true)}>
+              <LogOut size={17} /> Logout
+            </button>
+          )}
         </div>
       </div>
 
@@ -121,12 +144,12 @@ export function Settings() {
         open={delOpen}
         onClose={() => setDelOpen(false)}
         title="Warning!"
-        text="This process is irreversible."
-        confirmLabel="Delete"
+        text={user.guest ? "Your lobbies, friends and settings on this device will be cleared." : "This process is irreversible."}
+        confirmLabel={user.guest ? "Reset" : "Delete"}
         onConfirm={() => {
           setDelOpen(false);
           deleteAccount();
-          nav("/signup");
+          nav("/");
         }}
       />
     </div>

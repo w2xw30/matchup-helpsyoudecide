@@ -5,7 +5,11 @@ import {
   av,
   defaultLobbies,
   newCode,
+  seedClans,
+  seedFriends,
   seedNotifs,
+  type Clan,
+  type Friend,
   type Invite,
   type ItemKind,
   type Lobby,
@@ -23,6 +27,8 @@ export interface User {
   email: string;
   bio: string;
   avatar: string;
+  /** true until the person logs in or signs up — guests can use everything locally */
+  guest?: boolean;
 }
 export interface Settings {
   push: boolean;
@@ -53,6 +59,8 @@ export interface NewLobby {
   deadline: string;
   requiredMatch: 50 | 75 | 100;
   itemTitles: string[];
+  /** handles (emails/usernames) to invite right away, e.g. a clan's members */
+  invites?: string[];
 }
 export interface ItemDraft {
   title: string;
@@ -66,11 +74,20 @@ export type LobbyPatch = Partial<
   Pick<Lobby, "name" | "description" | "kind" | "emoji" | "linkAccess" | "allowFriends" | "maxMembers" | "deadline" | "requiredMatch" | "locked">
 >;
 export type InviteResult = "ok" | "duplicate" | "full" | "invalid";
+export type FriendResult = "ok" | "duplicate" | "invalid" | "self";
+export interface NewClan {
+  name: string;
+  emoji: string;
+  description: string;
+  memberIds: string[];
+}
 
 interface State {
   theme: Theme;
-  user: User | null;
+  user: User;
   settings: Settings;
+  friends: Friend[];
+  clans: Clan[];
   lobbies: Record<string, Lobby>;
   votes: Record<string, Vote>;
   notifs: Notif[];
@@ -87,6 +104,13 @@ interface State {
 
   toast: (message: string, tone?: Toast["tone"]) => void;
   dismissToast: (id: number) => void;
+
+  addFriend: (handle: string) => FriendResult;
+  acceptFriend: (id: string) => void;
+  removeFriend: (id: string) => void;
+  createClan: (input: NewClan) => string;
+  updateClan: (id: string, patch: Partial<NewClan>) => void;
+  deleteClan: (id: string) => void;
 
   createLobby: (input: NewLobby) => string;
   updateLobby: (id: string, patch: LobbyPatch) => void;
@@ -122,12 +146,14 @@ interface State {
   resetDemo: () => void;
 }
 
+// No stock photo by default: people without one get an initials tile.
 const defaultUser = (name = "Alex Rivera", email = "alex@example.com"): User => ({
   name,
   email,
   bio: "Daytime party enthusiast and poll creator. Let's find the best spots in the city! 🙌",
-  avatar: av(1),
+  avatar: "",
 });
+export const guestUser = (): User => ({ name: "Guest", email: "", bio: "", avatar: "", guest: true });
 
 const defaultSettings = (): Settings => ({
   push: true,
@@ -191,8 +217,10 @@ export const useStore = create<State>()(
   persist(
     (set, get) => ({
       theme: "light",
-      user: null,
+      user: guestUser(),
       settings: defaultSettings(),
+      friends: seedFriends(),
+      clans: seedClans(),
       lobbies: defaultLobbies(),
       votes: {},
       notifs: seedNotifs(),
@@ -204,21 +232,23 @@ export const useStore = create<State>()(
       login: (email, name) =>
         set((s) => ({
           user:
-            s.user && s.user.email === email && !name
+            !s.user.guest && s.user.email === email && !name
               ? s.user
               : defaultUser(name ?? (email === "alex@example.com" ? "Alex Rivera" : prettyName(email)), email),
         })),
-      logout: () => set({ user: null }),
+      logout: () => set({ user: guestUser() }),
       deleteAccount: () =>
         set({
-          user: null,
+          user: guestUser(),
+          friends: seedFriends(),
+          clans: seedClans(),
           settings: defaultSettings(),
           lobbies: defaultLobbies(),
           votes: {},
           notifs: seedNotifs(),
           hiddenTemplates: [],
         }),
-      updateProfile: (p) => set((s) => (s.user ? { user: { ...s.user, ...p } } : s)),
+      updateProfile: (p) => set((s) => ({ user: { ...s.user, ...p } })),
       setSetting: (k, v) => set((s) => ({ settings: { ...s.settings, [k]: v } })),
 
       toast: (message, tone = "success") => {
@@ -227,6 +257,45 @@ export const useStore = create<State>()(
         setTimeout(() => get().dismissToast(id), 2800);
       },
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+
+      /* ---------------- friends & clans ---------------- */
+      addFriend: (handle) => {
+        const h = handle.trim();
+        if (!validHandle(h)) return "invalid";
+        const s = get();
+        const key = h.toLowerCase().replace(/^@/, "");
+        if (s.user.email && key === s.user.email.toLowerCase()) return "self";
+        const name = handleToName(h);
+        if (s.friends.some((f) => f.handle.toLowerCase().replace(/^@/, "") === key || f.name.split(" ")[0].toLowerCase() === name.toLowerCase())) return "duplicate";
+        set((x) => ({ friends: [...x.friends, { id: `f-${rid()}${rid()}`, name, handle: h, status: "pending", addedAt: Date.now() }] }));
+        return "ok";
+      },
+      // Simulates the other person accepting the request. Replace with a server event later.
+      acceptFriend: (id) =>
+        set((s) => ({
+          friends: s.friends.map((f) => (f.id === id && f.status === "pending" ? { ...f, status: "friend" as const, avatar: POOL[hash(f.name) % POOL.length] } : f)),
+        })),
+      removeFriend: (id) =>
+        set((s) => ({
+          friends: s.friends.filter((f) => f.id !== id),
+          clans: s.clans.map((c) => ({ ...c, memberIds: c.memberIds.filter((m) => m !== id) })),
+        })),
+      createClan: (input) => {
+        const id = `clan-${slug(input.name)}-${rid()}`;
+        set((s) => ({
+          clans: [{ id, name: input.name.trim(), emoji: input.emoji, description: input.description.trim(), memberIds: input.memberIds, createdAt: Date.now() }, ...s.clans],
+        }));
+        return id;
+      },
+      updateClan: (id, patch) =>
+        set((s) => ({
+          clans: s.clans.map((c) =>
+            c.id === id
+              ? { ...c, ...patch, name: patch.name !== undefined ? patch.name.trim() || c.name : c.name, description: patch.description !== undefined ? patch.description.trim() : c.description }
+              : c,
+          ),
+        })),
+      deleteClan: (id) => set((s) => ({ clans: s.clans.filter((c) => c.id !== id) })),
 
       /* ---------------- lobbies ---------------- */
       createLobby: (input) => {
@@ -247,7 +316,7 @@ export const useStore = create<State>()(
           kind: input.kind,
           emoji: input.emoji,
           members: [{ id: "you", name: "You", status: "thinking", role: "owner", joinedAt: now }],
-          invites: [],
+          invites: (input.invites ?? []).map((to, i) => ({ id: `inv-${rid()}${i}`, to, sentAt: now })),
           ready: [],
           items,
           deadline: input.deadline,
@@ -328,12 +397,13 @@ export const useStore = create<State>()(
         const l = get().lobbies[id];
         const inv = l?.invites.find((i) => i.id === inviteId);
         if (!l || !inv) return null;
-        const name = handleToName(inv.to);
+        const friend = get().friends.find((f) => f.handle.toLowerCase() === inv.to.toLowerCase());
+        const name = friend ? friend.name.split(" ")[0] : handleToName(inv.to);
         const member: Member = {
           id: `m-${rid()}${rid()}`,
           name,
-          fullName: inv.to.includes("@") ? inv.to : undefined,
-          avatar: POOL[hash(name) % POOL.length],
+          fullName: friend?.name ?? (inv.to.includes("@") ? inv.to : undefined),
+          avatar: friend?.avatar ?? POOL[hash(name) % POOL.length],
           status: "thinking",
           role: "member",
           joinedAt: Date.now(),
@@ -458,21 +528,31 @@ export const useStore = create<State>()(
       markRead: (id) => set((s) => ({ notifs: s.notifs.map((n) => (n.id === id ? { ...n, read: true } : n)) })),
 
       hideTemplate: (id) => set((s) => ({ hiddenTemplates: [...s.hiddenTemplates, id] })),
-      resetDemo: () => set({ lobbies: defaultLobbies(), votes: {}, notifs: seedNotifs(), hiddenTemplates: [] }),
+      resetDemo: () => set({ lobbies: defaultLobbies(), votes: {}, notifs: seedNotifs(), hiddenTemplates: [], friends: seedFriends(), clans: seedClans() }),
     }),
     {
       name: "matchup-v1",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => safeStorage),
-      // v1 stored lobbies in an older shape (no roles / rich items). Keep the account, reset lobby data.
-      migrate: (persisted) => {
+      // v1 → v2: lobbies changed shape, so reset them. v3: everyone can browse as a guest, and the
+      // stock profile photo is gone. Keep whatever account/settings the person already had.
+      migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<State>;
-        return { ...p, lobbies: defaultLobbies(), votes: {} } as State;
+        const next: Partial<State> = { ...p };
+        if (version < 2) {
+          next.lobbies = defaultLobbies();
+          next.votes = {};
+        }
+        if (!p.user) next.user = guestUser();
+        else if (p.user.avatar === av(1)) next.user = { ...p.user, avatar: "" };
+        return next as State;
       },
       partialize: (s) => ({
         theme: s.theme,
         user: s.user,
         settings: s.settings,
+        friends: s.friends,
+        clans: s.clans,
         lobbies: s.lobbies,
         votes: s.votes,
         notifs: s.notifs,

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight, Globe, History, MoreHorizontal, Plus, TrendingUp, Zap } from "lucide-react";
-import { av, recents, templates, type Template } from "../data/mock";
+import { templates, type Template } from "../data/mock";
+import { isMember } from "../lib/perms";
 import { useStore } from "../store/useStore";
-import { Avatar, AvatarStack, LinkButton } from "../components/ui/ui";
+import { LinkButton } from "../components/ui/ui";
 
 function TemplateCard({ tpl }: { tpl: Template }) {
   const [open, setOpen] = useState(false);
@@ -58,6 +59,9 @@ export function Home() {
   const hidden = useStore((s) => s.hiddenTemplates);
   const nav = useNavigate();
   const shown = templates.filter((t) => !hidden.includes(t.id));
+  const lobbyMap = useStore((s) => s.lobbies);
+  const mine = useMemo(() => Object.values(lobbyMap).filter(isMember).sort((a, b) => b.createdAt - a.createdAt), [lobbyMap]);
+  const resume = mine[0];
 
   return (
     <div className="home">
@@ -72,10 +76,18 @@ export function Home() {
         <Link to="/lobby/new" className="hero-create">
           <Plus size={15} /> or create your own lobby
         </Link>
-        <Link to="/join" className="hero-friends" aria-label="12 friends waiting to play">
-          <AvatarStack avatars={[av(5), av(2), av(6)]} extra="+12" size={44} />
-          <span className="eyebrow">Friends waiting to play</span>
-        </Link>
+        {resume && (
+          <Link to={`/lobby/${resume.id}`} className="hero-resume">
+            <span className="emoji-big sm" aria-hidden>
+              {resume.emoji}
+            </span>
+            <span className="hero-resume-text">
+              <small>PICK UP WHERE YOU LEFT OFF</small>
+              <strong>{resume.name}</strong>
+            </span>
+            <ChevronRight size={16} />
+          </Link>
+        )}
       </section>
 
       <div className="home-grid">
@@ -103,21 +115,25 @@ export function Home() {
             </Link>
           </div>
           <div className="recents-card">
-            {recents.map((r) => (
-              <Link key={r.id} to={`/lobby/${r.lobbyId}`} className="recent-row">
-                <span className="recent-avatars">
-                  {r.avatars.map((a, i) => (
-                    <Avatar key={i} src={a} size={30} className="stack-item" />
-                  ))}
-                  {r.initials && <span className="stack-extra sm">{r.initials}</span>}
+            {mine.slice(0, 3).map((l) => (
+              <Link key={l.id} to={`/lobby/${l.id}`} className="recent-row">
+                <span className="emoji-big sm" aria-hidden>
+                  {l.emoji}
                 </span>
                 <span className="recent-text">
-                  <strong>{r.title}</strong>
-                  <small>{r.meta}</small>
+                  <strong>{l.name}</strong>
+                  <small>
+                    {l.items.length} OPTIONS • {l.members.length} {l.members.length === 1 ? "MEMBER" : "MEMBERS"}
+                  </small>
                 </span>
                 <ChevronRight size={16} />
               </Link>
             ))}
+            {mine.length === 0 && (
+              <p className="recents-empty">
+                No lobbies yet. <Link to="/lobby/new">Create your first one</Link>.
+              </p>
+            )}
             <button type="button" className="recents-bar" onClick={() => nav("/activity")}>
               View all activity
             </button>
