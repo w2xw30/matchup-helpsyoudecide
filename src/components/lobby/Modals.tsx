@@ -460,7 +460,7 @@ function SettingsBody({ lobby, onClose }: { lobby: Lobby; onClose: () => void })
       <div className="kind-picker">
         {LOBBY_KINDS.map((k) => (
           <button key={k.id} type="button" className={`kind-chip ${kind === k.id ? "on" : ""}`} onClick={() => setKind(k.id)}>
-            <span aria-hidden>{k.emoji}</span> {k.label}
+            {k.label}
           </button>
         ))}
       </div>

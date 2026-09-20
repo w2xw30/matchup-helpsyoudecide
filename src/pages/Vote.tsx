@@ -23,7 +23,7 @@ export function CardFace({ item, stamp }: { item: LobbyItem; stamp?: "like" | "n
             </span>
           ) : (
             <span className="chip-glass">
-              <span aria-hidden>{meta.emoji}</span> {meta.label.toUpperCase()}
+              {meta.label.toUpperCase()}
             </span>
           )}
           <span className="chip-glass">{item.distance ?? `ADDED BY ${byline.toUpperCase()}`}</span>

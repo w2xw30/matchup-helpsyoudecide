@@ -59,12 +59,7 @@ export function Customize() {
             <ArrowLeft size={15} /> Back to lobby
           </Link>
           <span className="eyebrow crimson line">Active Lobby</span>
-          <h1>
-            <span className="h1-emoji" aria-hidden>
-              {lobby.emoji}
-            </span>
-            {lobby.name}
-          </h1>
+          <h1>{lobby.name}</h1>
           <p>{lobby.description || "Collaborate with your group to build the perfect evening. Add your favorites or pick from the templates below."}</p>
         </div>
 
@@ -124,8 +119,8 @@ export function Customize() {
               <PlusCircle size={18} /> Add New Option
             </button>
           )}
-          {shown.map((it, idx) => (
-            <div key={it.id} className={`contrib ${idx === 1 ? "accented" : ""}`}>
+          {shown.map((it) => (
+            <div key={it.id} className="contrib">
               <ItemThumb item={it} size={40} />
               <div className="c-text">
                 <strong>{it.title}</strong>

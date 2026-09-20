@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown } from "lucide-react";
-import { LOBBY_KINDS, POPULAR, guessVisual, type LobbyKind } from "../lib/catalog";
+import { LOBBY_KINDS, POPULAR, type LobbyKind } from "../lib/catalog";
 import { EMOJIS } from "../lib/emoji";
 import { templates } from "../data/mock";
 import { useStore } from "../store/useStore";
@@ -135,7 +135,7 @@ export function CreateLobby() {
           <div className="cm-kinds" role="radiogroup" aria-label="Lobby type">
             {LOBBY_KINDS.map((k) => (
               <button key={k.id} type="button" role="radio" aria-checked={kind === k.id} className={`cm-kind ${kind === k.id ? "on" : ""}`} onClick={() => pickKind(k.id)}>
-                <span aria-hidden>{k.emoji}</span> {k.label}
+                {k.label}
               </button>
             ))}
           </div>
@@ -150,7 +150,7 @@ export function CreateLobby() {
               const on = picks.includes(t);
               return (
                 <button key={t} type="button" className={`pop-chip ${on ? "on" : ""}`} aria-pressed={on} onClick={() => toggle(t)}>
-                  <span aria-hidden>{guessVisual(t, kind === "mixed" ? "other" : kind).emoji}</span> {t}
+                  {t}
                 </button>
               );
             })}

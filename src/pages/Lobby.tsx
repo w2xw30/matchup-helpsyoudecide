@@ -194,7 +194,7 @@ export function LobbyPage() {
               <span className={`pill ${lobby.locked ? "pill-gray" : "pill-yellow"}`}>{lobby.locked ? "LOCKED" : "LIVE"}</span>
             </div>
             <div className="sd-row">
-              <span className="sd-icon pink" aria-hidden>
+              <span className="sd-icon lav" aria-hidden>
                 <span className="sd-emoji">{lobby.emoji}</span>
               </span>
               <div>

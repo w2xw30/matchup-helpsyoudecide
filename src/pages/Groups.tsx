@@ -90,14 +90,17 @@ function LobbiesTab({ lobbies }: { lobbies: ReturnType<typeof useStore.getState>
         return (
           <article key={l.id} className="tpl-card group-card">
             <div className="tpl-top">
-              <span className={`pill ${ready >= l.members.length ? "pill-yellow" : "pill-gray"}`}>
-                {ready >= l.members.length ? "ALL READY" : `${ready}/${l.members.length} READY`}
+              <span className="emoji-big md" aria-hidden>
+                {l.emoji}
               </span>
-              <span className={`role-badge role-${role}`}>{roleLabel(role)}</span>
+              <span className="tpl-badges">
+                <span className={`pill ${ready >= l.members.length ? "pill-yellow" : "pill-gray"}`}>
+                  {ready >= l.members.length ? "ALL READY" : `${ready}/${l.members.length} READY`}
+                </span>
+                <span className={`role-badge role-${role}`}>{roleLabel(role)}</span>
+              </span>
             </div>
-            <h3>
-              <span aria-hidden>{l.emoji}</span> {l.name}
-            </h3>
+            <h3>{l.name}</h3>
             <p>
               {l.items.length} options · {l.members.length} {l.members.length === 1 ? "member" : "members"}
             </p>
@@ -243,7 +246,7 @@ function ClansTab({ onManage, onNew }: { onManage: (c: Clan) => void; onNew: () 
         return (
           <article key={c.id} className="tpl-card group-card clan-card">
             <div className="tpl-top">
-              <span className="emoji-big" aria-hidden>
+              <span className="emoji-big md" aria-hidden>
                 {c.emoji}
               </span>
               <span className="role-badge role-owner">Owner</span>

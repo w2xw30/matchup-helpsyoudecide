@@ -292,3 +292,9 @@
   .sheet-actions .push-left { margin-right: 0; width: 100%; }
   .sheet-actions .btn { flex: 1; }
 }
+
+/* ---------- Emoji tiles: one neutral, quiet style everywhere ---------- */
+.emoji-big, .emoji-big.lg { background: var(--lavender); }
+[data-theme="dark"] .emoji-big.lg { background: var(--lavender); }
+.emoji-big.md { width: 44px; height: 44px; font-size: 22px; border-radius: 14px; }
+.tpl-badges { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

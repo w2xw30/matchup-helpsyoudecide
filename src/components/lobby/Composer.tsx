@@ -15,7 +15,7 @@ function KindPicker({ value, onChange }: { value: ItemKind; onChange: (k: ItemKi
     <div className="kind-picker" role="radiogroup" aria-label="Category">
       {KINDS.map((k) => (
         <button key={k} type="button" role="radio" aria-checked={value === k} className={`kind-chip ${value === k ? "on" : ""}`} onClick={() => onChange(k)}>
-          <span aria-hidden>{KIND_META[k].emoji}</span> {KIND_META[k].label}
+          {KIND_META[k].label}
         </button>
       ))}
     </div>
@@ -204,7 +204,7 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
                       <strong>{s.title}</strong>
                       {s.desc && <small>{s.desc}</small>}
                     </span>
-                    <span className="suggest-tag">{s.image ? "Photo" : s.emoji}</span>
+                    {s.image && <span className="suggest-tag">Photo</span>}
                   </button>
                 </li>
               ))}
@@ -258,7 +258,6 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
         <div className="popular">
           <span>Try:</span>
           {popular.map((p) => {
-            const v = guessVisual(p, fallback);
             return (
               <button
                 key={p}
@@ -270,7 +269,7 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
                   input.current?.focus();
                 }}
               >
-                <span aria-hidden>{v.emoji}</span> {p}
+                {p}
               </button>
             );
           })}
