@@ -1,0 +1,96 @@
+:root {
+  /* brand */
+  --crimson: #b12b37;
+  --crimson-dark: #9a2430;
+  --coral: #ff5f6b;
+  --coral-soft: #ff7d87;
+  --indigo: #2d3a80;
+  --indigo-muted: #7379a9;
+  --indigo-faint: #a5a9cc;
+  --lavender: #f7f0fd;
+  --lavender-2: #eee5f6;
+  --lavender-3: #e6dcf0;
+  --yellow: #f9e79f;
+  --yellow-soft: #fbf6de;
+  --yellow-ink: #6b5a12;
+  --teal: #1e8a6d;
+  --green: #22c55e;
+  --pink-tint: #fee8e9;
+  --pink-line: #f1c8cc;
+
+  /* semantic (light) */
+  --bg: #ffffff;
+  --bg-auth: #fefcfa;
+  --surface: #ffffff;
+  --surface-2: var(--lavender);
+  --surface-3: var(--lavender-2);
+  --text: #1a1a1f;
+  --text-2: #4e4448;
+  --text-3: #756b70;
+  --heading-accent: var(--indigo);
+  --nav-link: var(--indigo-muted);
+  --border: #e8e6ee;
+  --border-strong: #cfd2e8;
+  --shadow-sm: 0 1px 3px rgba(40, 30, 70, 0.08);
+  --shadow-md: 0 4px 16px rgba(40, 30, 70, 0.08);
+  --shadow-lg: 0 12px 40px rgba(40, 30, 70, 0.12);
+  --primary: var(--crimson);
+  --primary-hover: var(--crimson-dark);
+  --primary-glow: rgba(177, 43, 55, 0.28);
+  --footer-heading: var(--indigo);
+  --footer-text: var(--indigo-muted);
+  --footer-faint: #c9cbe3;
+  --hero-border: #b6b9db;
+  --strong-bar: var(--indigo);
+  --pink-card: var(--pink-tint);
+  --overlay: rgba(26, 20, 40, 0.5);
+
+  /* shape */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-2xl: 32px;
+  --r-pill: 999px;
+
+  --container: 1040px;
+  --nav-w: 1120px;
+
+  --font: "Poppins", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #15130f;
+  --bg-auth: #15130f;
+  --surface: #0d0c0a;
+  --surface-2: #1c1a16;
+  --surface-3: #24211c;
+  --text: #ffffff;
+  --text-2: #e9e6e2;
+  --text-3: #b3aea7;
+  --heading-accent: #4a58b8;
+  --nav-link: #ffffff;
+  --border: #2b2923;
+  --border-strong: #6b6440;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6);
+  --primary: #d9535f;
+  --primary-hover: #e5626d;
+  --primary-glow: rgba(217, 83, 95, 0.35);
+  --footer-heading: #ffffff;
+  --footer-text: #ffffff;
+  --footer-faint: #4a4741;
+  --hero-border: #6b6440;
+  --strong-bar: #4a58b8;
+  --pink-card: #0d0c0a;
+  --lavender: #1c1a16;
+  --lavender-2: #24211c;
+  --lavender-3: #2f2b25;
+  --yellow-soft: #2a2614;
+  --yellow-ink: #e9d98a;
+  --pink-line: #4a2a2e;
+  --overlay: rgba(0, 0, 0, 0.7);
+  color-scheme: dark;
+}
