@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, Globe, History, MoreHorizontal, TrendingUp, Zap } from "lucide-react";
+import { ChevronRight, Globe, History, MoreHorizontal, Plus, TrendingUp, Zap } from "lucide-react";
 import { av, recents, templates, type Template } from "../data/mock";
 import { useStore } from "../store/useStore";
 import { Avatar, AvatarStack, LinkButton } from "../components/ui/ui";
@@ -9,7 +9,6 @@ function TemplateCard({ tpl }: { tpl: Template }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const nav = useNavigate();
-  const create = useStore((s) => s.createLobbyFromTemplate);
   const hide = useStore((s) => s.hideTemplate);
   const toast = useStore((s) => s.toast);
 
@@ -20,11 +19,7 @@ function TemplateCard({ tpl }: { tpl: Template }) {
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
 
-  const start = () => {
-    const id = create(tpl);
-    toast(`"${tpl.title}" lobby created`);
-    nav(`/lobby/${id}/customize`);
-  };
+  const start = () => nav(`/lobby/new?template=${tpl.id}`);
 
   return (
     <article className="tpl-card">
@@ -74,6 +69,9 @@ export function Home() {
         <LinkButton to="/join" size="xl" className="hero-cta">
           Join Session <Zap size={17} />
         </LinkButton>
+        <Link to="/lobby/new" className="hero-create">
+          <Plus size={15} /> or create your own lobby
+        </Link>
         <Link to="/join" className="hero-friends" aria-label="12 friends waiting to play">
           <AvatarStack avatars={[av(5), av(2), av(6)]} extra="+12" size={44} />
           <span className="eyebrow">Friends waiting to play</span>

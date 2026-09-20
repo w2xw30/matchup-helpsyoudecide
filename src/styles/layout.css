@@ -20,14 +20,6 @@
 .nav-bell-dot { position: absolute; top: 3px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--coral); border: 2px solid var(--surface); box-sizing: content-box; }
 .nav-user { position: relative; }
 .nav-avatar { display: flex; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--border); }
-.theme-toggle {
-  pointer-events: auto; position: absolute; top: 48px; left: calc(50% + var(--nav-w) / 2 + 16px);
-  width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  background: var(--surface); color: var(--indigo); box-shadow: var(--shadow-md); border: 1px solid var(--border);
-}
-[data-theme="dark"] .theme-toggle { color: #fff; }
-.theme-toggle:hover { transform: rotate(12deg); }
-@media (max-width: 1260px) { .theme-toggle { display: none; } }
 
 /* ---------- Footer ---------- */
 .footer { border-top: 1px solid var(--border); background: var(--surface); margin-top: 40px; }

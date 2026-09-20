@@ -5,6 +5,7 @@ import { AppShell } from "./components/layout/Layout";
 import { Login, Signup } from "./pages/Auth";
 import { Home } from "./pages/Home";
 import { Invite, Join } from "./pages/Join";
+import { CreateLobby } from "./pages/Create";
 import { LobbyPage } from "./pages/Lobby";
 import { Customize } from "./pages/Customize";
 import { Result, Vote } from "./pages/Vote";
@@ -28,15 +29,6 @@ function ThemeSync() {
   return null;
 }
 
-/** Home is the only screen with the floating theme toggle, as in the design. */
-function HomeShell() {
-  return (
-    <AppShell themeToggle>
-      <Home />
-    </AppShell>
-  );
-}
-
 export default function App() {
   return (
     <BrowserRouter>
@@ -46,8 +38,9 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
 
         <Route element={<RequireAuth />}>
-          <Route path="/" element={<HomeShell />} />
           <Route element={<AppShell />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/lobby/new" element={<CreateLobby />} />
             <Route path="/join" element={<Join />} />
             <Route path="/join/:id" element={<Invite />} />
             <Route path="/groups" element={<Groups />} />

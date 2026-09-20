@@ -1,16 +1,21 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import {
   DEFAULT_LOBBY_ID,
   av,
   defaultLobbies,
-  makeLobby,
+  newCode,
   seedNotifs,
+  type Invite,
   type ItemKind,
   type Lobby,
+  type LobbyItem,
+  type LobbyKind,
+  type Member,
   type Notif,
-  type Template,
+  type Role,
 } from "../data/mock";
+import { KIND_META, guessVisual } from "../lib/catalog";
 
 export type Theme = "light" | "dark";
 export interface User {
@@ -37,6 +42,31 @@ export interface Toast {
   tone: "success" | "info" | "warn";
 }
 
+export interface NewLobby {
+  name: string;
+  description: string;
+  kind: LobbyKind;
+  emoji: string;
+  linkAccess: boolean;
+  allowFriends: boolean;
+  maxMembers: number;
+  deadline: string;
+  requiredMatch: 50 | 75 | 100;
+  itemTitles: string[];
+}
+export interface ItemDraft {
+  title: string;
+  kind?: ItemKind;
+  emoji?: string;
+  image?: string;
+  note?: string;
+  price?: string;
+}
+export type LobbyPatch = Partial<
+  Pick<Lobby, "name" | "description" | "kind" | "emoji" | "linkAccess" | "allowFriends" | "maxMembers" | "deadline" | "requiredMatch" | "locked">
+>;
+export type InviteResult = "ok" | "duplicate" | "full" | "invalid";
+
 interface State {
   theme: Theme;
   user: User | null;
@@ -58,16 +88,28 @@ interface State {
   toast: (message: string, tone?: Toast["tone"]) => void;
   dismissToast: (id: number) => void;
 
-  ensureLobby: (id: string) => Lobby;
-  createLobbyFromTemplate: (tpl: Template) => string;
-  joinLobby: (id: string, nickname?: string) => void;
-  addItem: (lobbyId: string, title: string, kind?: ItemKind) => boolean;
-  addItems: (lobbyId: string, titles: string[], kind: ItemKind) => number;
+  createLobby: (input: NewLobby) => string;
+  updateLobby: (id: string, patch: LobbyPatch) => void;
+  deleteLobby: (id: string) => void;
+  leaveLobby: (id: string) => void;
+  joinLobby: (id: string, nickname: string) => void;
+  regenerateCode: (id: string) => string;
+
+  inviteMember: (id: string, to: string) => InviteResult;
+  cancelInvite: (id: string, inviteId: string) => void;
+  acceptInvite: (id: string, inviteId: string) => string | null;
+  setRole: (id: string, memberId: string, role: Role) => void;
+  transferOwnership: (id: string, memberId: string) => void;
+  removeMember: (id: string, memberId: string) => void;
+
+  addItem: (lobbyId: string, draft: ItemDraft) => LobbyItem | null;
+  addItems: (lobbyId: string, titles: string[], kind?: ItemKind) => number;
+  updateItem: (lobbyId: string, itemId: string, patch: Partial<ItemDraft>) => void;
   removeItem: (lobbyId: string, itemId: string) => void;
-  setControl: (lobbyId: string, patch: Partial<Pick<Lobby, "deadline" | "requiredMatch" | "allowFriends">>) => void;
+
   toggleReady: (lobbyId: string, memberId?: string) => void;
   setMemberStatus: (lobbyId: string, memberId: string, ready: boolean) => void;
-  sendChat: (lobbyId: string, text: string) => void;
+  sendChat: (lobbyId: string, text: string, from?: string, mine?: boolean) => void;
 
   castVote: (sessionId: string, cardId: string, choice: "like" | "nope") => void;
   undoVote: (sessionId: string) => void;
@@ -97,8 +139,53 @@ const defaultSettings = (): Settings => ({
 });
 
 let toastSeq = 1;
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 28) || "lobby";
 const rid = () => Math.random().toString(36).slice(2, 6);
+const POOL = [av(6), av(7), av(8), av(2), av(3), av(4), av(5)];
+const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+export const handleToName = (h: string) => {
+  const local = h.trim().replace(/^@/, "").split("@")[0];
+  const word = local.split(/[._\-\s]+/).filter(Boolean)[0] ?? "Friend";
+  return word[0].toUpperCase() + word.slice(1).toLowerCase();
+};
+export const validHandle = (h: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(h.trim()) || /^@?[a-z0-9._-]{2,24}$/i.test(h.trim());
+
+function uniqueCode(lobbies: Record<string, Lobby>) {
+  const used = new Set(Object.values(lobbies).map((l) => l.code));
+  let c = newCode();
+  while (used.has(c)) c = newCode();
+  return c;
+}
+
+const patchLobby = (s: State, id: string, fn: (l: Lobby) => Lobby): Partial<State> => {
+  const l = s.lobbies[id];
+  return l ? { lobbies: { ...s.lobbies, [id]: fn(l) } } : {};
+};
+
+const safeStorage = {
+  getItem: (k: string) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (k: string, v: string) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* storage full or blocked — state stays in memory */
+    }
+  },
+  removeItem: (k: string) => {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  },
+};
 
 export const useStore = create<State>()(
   persist(
@@ -116,7 +203,10 @@ export const useStore = create<State>()(
       setTheme: (theme) => set({ theme }),
       login: (email, name) =>
         set((s) => ({
-          user: s.user && s.user.email === email && !name ? s.user : defaultUser(name ?? (email === "alex@example.com" ? "Alex Rivera" : prettyName(email)), email),
+          user:
+            s.user && s.user.email === email && !name
+              ? s.user
+              : defaultUser(name ?? (email === "alex@example.com" ? "Alex Rivera" : prettyName(email)), email),
         })),
       logout: () => set({ user: null }),
       deleteAccount: () =>
@@ -138,109 +228,213 @@ export const useStore = create<State>()(
       },
       dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
-      ensureLobby: (id) => {
-        const existing = get().lobbies[id];
-        if (existing) return existing;
-        const lobby = makeLobby({ id, name: "Friday Night Social", invitedName: "The Friday Hangout" });
-        set((s) => ({ lobbies: { ...s.lobbies, [id]: lobby } }));
-        return lobby;
-      },
-      createLobbyFromTemplate: (tpl) => {
-        const id = `${slug(tpl.title)}-${rid()}`;
-        const lobby = makeLobby({
-          id,
-          name: tpl.title,
-          invitedName: tpl.title,
-          category: tpl.category,
-          code: String(Math.floor(100000 + Math.random() * 900000)),
-          items: tpl.items.map((t, i) => ({ id: `${id}-${i}`, title: t, by: "You", kind: tpl.kind, mine: true })),
-          ready: ["you"],
-          chat: [],
+      /* ---------------- lobbies ---------------- */
+      createLobby: (input) => {
+        const s = get();
+        let id = `${slug(input.name)}-${rid()}`;
+        while (s.lobbies[id]) id = `${slug(input.name)}-${rid()}`;
+        const now = Date.now();
+        const fallback: ItemKind = input.kind === "mixed" ? "other" : input.kind;
+        const items: LobbyItem[] = input.itemTitles.map((t, i) => {
+          const v = guessVisual(t, fallback);
+          return { id: `${id}-${i}`, title: t, by: "You", byId: "you", kind: v.kind, emoji: v.emoji, addedAt: now + i };
         });
-        set((s) => ({ lobbies: { ...s.lobbies, [id]: lobby } }));
+        const lobby: Lobby = {
+          id,
+          code: uniqueCode(s.lobbies),
+          name: input.name.trim(),
+          description: input.description.trim(),
+          kind: input.kind,
+          emoji: input.emoji,
+          members: [{ id: "you", name: "You", status: "thinking", role: "owner", joinedAt: now }],
+          invites: [],
+          ready: [],
+          items,
+          deadline: input.deadline,
+          requiredMatch: input.requiredMatch,
+          allowFriends: input.allowFriends,
+          linkAccess: input.linkAccess,
+          maxMembers: input.maxMembers,
+          locked: false,
+          chat: [],
+          createdAt: now,
+        };
+        set({ lobbies: { ...s.lobbies, [id]: lobby } });
         return id;
       },
-      joinLobby: (id, nickname) => {
-        get().ensureLobby(id);
-        if (nickname) {
-          set((s) => {
-            const l = s.lobbies[id];
-            const squad = l.squad.map((m) => (m.id === "you" ? { ...m, name: nickname } : m));
-            return { lobbies: { ...s.lobbies, [id]: { ...l, squad } } };
-          });
-        }
-      },
-      addItem: (lobbyId, title, kind = "other") => {
-        const clean = title.trim();
-        if (!clean) return false;
+      updateLobby: (id, patch) => set((s) => patchLobby(s, id, (l) => ({ ...l, ...patch }))),
+      deleteLobby: (id) =>
         set((s) => {
-          const l = s.lobbies[lobbyId];
+          const lobbies = { ...s.lobbies };
+          delete lobbies[id];
+          const votes = { ...s.votes };
+          delete votes[id];
+          return { lobbies, votes };
+        }),
+      leaveLobby: (id) =>
+        set((s) => {
+          const l = s.lobbies[id];
           if (!l) return s;
-          const item = { id: `${lobbyId}-${Date.now()}-${rid()}`, title: clean, by: "You", kind, mine: true };
-          return { lobbies: { ...s.lobbies, [lobbyId]: { ...l, items: [item, ...l.items] } } };
-        });
-        return true;
+          const rest = l.members.filter((m) => m.id !== "you");
+          const lobbies = { ...s.lobbies };
+          if (rest.length === 0) delete lobbies[id];
+          else {
+            // ownership passes to the longest-standing admin, then the longest-standing member
+            const hadOwner = rest.some((m) => m.role === "owner");
+            const heir = hadOwner ? null : [...rest].sort((a, b) => Number(b.role === "admin") - Number(a.role === "admin") || a.joinedAt - b.joinedAt)[0];
+            lobbies[id] = {
+              ...l,
+              members: rest.map((m) => (heir && m.id === heir.id ? { ...m, role: "owner" as Role } : m)),
+              ready: l.ready.filter((r) => r !== "you"),
+            };
+          }
+          const votes = { ...s.votes };
+          delete votes[id];
+          return { lobbies, votes };
+        }),
+      joinLobby: (id, nickname) =>
+        set((s) => {
+          const l = s.lobbies[id];
+          if (!l) return s;
+          const me = l.members.find((m) => m.id === "you");
+          const members: Member[] = me
+            ? l.members.map((m) => (m.id === "you" ? { ...m, name: nickname } : m))
+            : [...l.members, { id: "you", name: nickname, status: "thinking", role: "member", joinedAt: Date.now() }];
+          const email = s.user?.email.toLowerCase();
+          return {
+            lobbies: { ...s.lobbies, [id]: { ...l, members, invites: l.invites.filter((i) => i.to.toLowerCase() !== email) } },
+          };
+        }),
+      regenerateCode: (id) => {
+        const code = uniqueCode(get().lobbies);
+        set((s) => patchLobby(s, id, (l) => ({ ...l, code })));
+        return code;
+      },
+
+      inviteMember: (id, to) => {
+        const l = get().lobbies[id];
+        const handle = to.trim();
+        if (!l || !validHandle(handle)) return "invalid";
+        const key = handle.toLowerCase();
+        if (l.invites.some((i) => i.to.toLowerCase() === key) || l.members.some((m) => m.name.toLowerCase() === handleToName(handle).toLowerCase())) return "duplicate";
+        if (l.members.length + l.invites.length >= l.maxMembers) return "full";
+        const invite: Invite = { id: `inv-${rid()}${rid()}`, to: handle, sentAt: Date.now() };
+        set((s) => patchLobby(s, id, (x) => ({ ...x, invites: [...x.invites, invite] })));
+        return "ok";
+      },
+      cancelInvite: (id, inviteId) => set((s) => patchLobby(s, id, (l) => ({ ...l, invites: l.invites.filter((i) => i.id !== inviteId) }))),
+      // Simulates the invitee accepting. With a backend this happens when they open the link.
+      acceptInvite: (id, inviteId) => {
+        const l = get().lobbies[id];
+        const inv = l?.invites.find((i) => i.id === inviteId);
+        if (!l || !inv) return null;
+        const name = handleToName(inv.to);
+        const member: Member = {
+          id: `m-${rid()}${rid()}`,
+          name,
+          fullName: inv.to.includes("@") ? inv.to : undefined,
+          avatar: POOL[hash(name) % POOL.length],
+          status: "thinking",
+          role: "member",
+          joinedAt: Date.now(),
+        };
+        set((s) => patchLobby(s, id, (x) => ({ ...x, invites: x.invites.filter((i) => i.id !== inviteId), members: [...x.members, member] })));
+        return name;
+      },
+      setRole: (id, memberId, role) =>
+        set((s) => patchLobby(s, id, (l) => ({ ...l, members: l.members.map((m) => (m.id === memberId && m.role !== "owner" ? { ...m, role } : m)) }))),
+      transferOwnership: (id, memberId) =>
+        set((s) =>
+          patchLobby(s, id, (l) => ({
+            ...l,
+            members: l.members.map((m) => (m.id === memberId ? { ...m, role: "owner" as Role } : m.role === "owner" ? { ...m, role: "admin" as Role } : m)),
+          })),
+        ),
+      removeMember: (id, memberId) =>
+        set((s) => patchLobby(s, id, (l) => ({ ...l, members: l.members.filter((m) => m.id !== memberId), ready: l.ready.filter((r) => r !== memberId) }))),
+
+      /* ---------------- items ---------------- */
+      addItem: (lobbyId, draft) => {
+        const l = get().lobbies[lobbyId];
+        const title = draft.title.trim();
+        if (!l || !title) return null;
+        const fallback: ItemKind = l.kind === "mixed" ? "other" : l.kind;
+        const v = guessVisual(title, fallback);
+        const kind = draft.kind ?? v.kind;
+        const me = l.members.find((m) => m.id === "you");
+        const item: LobbyItem = {
+          id: `${lobbyId}-${Date.now().toString(36)}-${rid()}`,
+          title,
+          by: me?.name && me.name !== "You" ? me.name : "You",
+          byId: "you",
+          kind,
+          emoji: draft.emoji ?? (draft.kind && draft.kind !== v.kind ? KIND_META[draft.kind].emoji : v.emoji),
+          image: draft.image,
+          note: draft.note?.trim() || undefined,
+          price: draft.price?.trim() || undefined,
+          addedAt: Date.now(),
+        };
+        set((s) => patchLobby(s, lobbyId, (x) => ({ ...x, items: [...x.items, item] })));
+        return item;
       },
       addItems: (lobbyId, titles, kind) => {
+        const l = get().lobbies[lobbyId];
+        if (!l) return 0;
+        const have = new Set(l.items.map((i) => i.title.toLowerCase()));
         let added = 0;
-        set((s) => {
-          const l = s.lobbies[lobbyId];
-          if (!l) return s;
-          const have = new Set(l.items.map((i) => i.title.toLowerCase()));
-          const fresh = titles
-            .filter((t) => !have.has(t.toLowerCase()))
-            .map((t) => ({ id: `${lobbyId}-${Date.now()}-${rid()}`, title: t, by: "You", kind, mine: true }));
-          added = fresh.length;
-          return { lobbies: { ...s.lobbies, [lobbyId]: { ...l, items: [...fresh, ...l.items] } } };
-        });
+        for (const t of titles) {
+          if (have.has(t.toLowerCase())) continue;
+          if (get().addItem(lobbyId, { title: t, kind: kind && !guessVisual(t).matched ? kind : undefined })) added++;
+        }
         return added;
       },
-      removeItem: (lobbyId, itemId) =>
-        set((s) => {
-          const l = s.lobbies[lobbyId];
-          if (!l) return s;
-          return { lobbies: { ...s.lobbies, [lobbyId]: { ...l, items: l.items.filter((i) => i.id !== itemId) } } };
-        }),
-      setControl: (lobbyId, patch) =>
-        set((s) => {
-          const l = s.lobbies[lobbyId];
-          return l ? { lobbies: { ...s.lobbies, [lobbyId]: { ...l, ...patch } } } : s;
-        }),
+      updateItem: (lobbyId, itemId, patch) =>
+        set((s) =>
+          patchLobby(s, lobbyId, (l) => ({
+            ...l,
+            items: l.items.map((i) =>
+              i.id === itemId
+                ? {
+                    ...i,
+                    ...patch,
+                    title: patch.title?.trim() || i.title,
+                    note: patch.note !== undefined ? patch.note.trim() || undefined : i.note,
+                    price: patch.price !== undefined ? patch.price.trim() || undefined : i.price,
+                  }
+                : i,
+            ),
+          })),
+        ),
+      removeItem: (lobbyId, itemId) => set((s) => patchLobby(s, lobbyId, (l) => ({ ...l, items: l.items.filter((i) => i.id !== itemId) }))),
+
+      /* ---------------- readiness / chat ---------------- */
       toggleReady: (lobbyId, memberId = "you") =>
-        set((s) => {
-          const l = s.lobbies[lobbyId];
-          if (!l) return s;
-          const ready = l.ready.includes(memberId) ? l.ready.filter((m) => m !== memberId) : [...l.ready, memberId];
-          return { lobbies: { ...s.lobbies, [lobbyId]: { ...l, ready } } };
-        }),
+        set((s) =>
+          patchLobby(s, lobbyId, (l) => ({
+            ...l,
+            ready: l.ready.includes(memberId) ? l.ready.filter((m) => m !== memberId) : [...l.ready, memberId],
+          })),
+        ),
       setMemberStatus: (lobbyId, memberId, ready) =>
         set((s) => {
           const l = s.lobbies[lobbyId];
           if (!l || l.ready.includes(memberId) === ready) return s;
-          const list = ready ? [...l.ready, memberId] : l.ready.filter((m) => m !== memberId);
-          return { lobbies: { ...s.lobbies, [lobbyId]: { ...l, ready: list } } };
+          return patchLobby(s, lobbyId, (x) => ({ ...x, ready: ready ? [...x.ready, memberId] : x.ready.filter((m) => m !== memberId) }));
         }),
-      sendChat: (lobbyId, text) => {
+      sendChat: (lobbyId, text, from = "You", mine = true) => {
         const clean = text.trim();
         if (!clean) return;
-        set((s) => {
-          const l = s.lobbies[lobbyId];
-          if (!l) return s;
-          const msg = { id: `c-${Date.now()}`, from: "You", text: clean, mine: true };
-          return { lobbies: { ...s.lobbies, [lobbyId]: { ...l, chat: [...l.chat, msg] } } };
-        });
+        set((s) => patchLobby(s, lobbyId, (l) => ({ ...l, chat: [...l.chat, { id: `c-${Date.now()}-${rid()}`, from, text: clean, mine }] })));
       },
 
+      /* ---------------- voting ---------------- */
       castVote: (sessionId, cardId, choice) =>
         set((s) => {
           const v = s.votes[sessionId] ?? { answers: {}, order: [] };
           return {
             votes: {
               ...s.votes,
-              [sessionId]: {
-                answers: { ...v.answers, [cardId]: choice },
-                order: [...v.order.filter((c) => c !== cardId), cardId],
-              },
+              [sessionId]: { answers: { ...v.answers, [cardId]: choice }, order: [...v.order.filter((c) => c !== cardId), cardId] },
             },
           };
         }),
@@ -264,17 +458,17 @@ export const useStore = create<State>()(
       markRead: (id) => set((s) => ({ notifs: s.notifs.map((n) => (n.id === id ? { ...n, read: true } : n)) })),
 
       hideTemplate: (id) => set((s) => ({ hiddenTemplates: [...s.hiddenTemplates, id] })),
-      resetDemo: () =>
-        set({
-          lobbies: defaultLobbies(),
-          votes: {},
-          notifs: seedNotifs(),
-          hiddenTemplates: [],
-        }),
+      resetDemo: () => set({ lobbies: defaultLobbies(), votes: {}, notifs: seedNotifs(), hiddenTemplates: [] }),
     }),
     {
       name: "matchup-v1",
-      version: 1,
+      version: 2,
+      storage: createJSONStorage(() => safeStorage),
+      // v1 stored lobbies in an older shape (no roles / rich items). Keep the account, reset lobby data.
+      migrate: (persisted) => {
+        const p = (persisted ?? {}) as Partial<State>;
+        return { ...p, lobbies: defaultLobbies(), votes: {} } as State;
+      },
       partialize: (s) => ({
         theme: s.theme,
         user: s.user,

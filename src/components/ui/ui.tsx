@@ -144,12 +144,17 @@ export function ToastHost() {
 }
 
 /* ---------- Modal ---------- */
+const modalStack: object[] = [];
+
 export function Modal({ open, onClose, children, label }: { open: boolean; onClose: () => void; children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
+    const token = {};
+    modalStack.push(token);
     const onKey = (e: KeyboardEvent) => {
+      if (modalStack[modalStack.length - 1] !== token) return; // only the top-most modal reacts
       if (e.key === "Escape") onClose();
       if (e.key === "Tab" && ref.current) {
         const f = ref.current.querySelectorAll<HTMLElement>("button, a[href], input, [tabindex]:not([tabindex='-1'])");
@@ -170,7 +175,8 @@ export function Modal({ open, onClose, children, label }: { open: boolean; onClo
     ref.current?.querySelector<HTMLElement>("[data-autofocus], button, a[href], input")?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      modalStack.splice(modalStack.indexOf(token), 1);
+      if (modalStack.length === 0) document.body.style.overflow = "";
       prev?.focus?.();
     };
   }, [open, onClose]);

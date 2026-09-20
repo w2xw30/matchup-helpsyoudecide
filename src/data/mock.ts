@@ -1,3 +1,7 @@
+import { guessVisual, type ItemKind, type LobbyKind } from "../lib/catalog";
+
+export type { ItemKind, LobbyKind };
+
 export const av = (n: number) => `/images/avatars/a${n}.jpg`;
 
 export const FOOD_IMG = {
@@ -7,26 +11,35 @@ export const FOOD_IMG = {
 };
 
 export type MemberStatus = "ready" | "adding" | "thinking";
+export type Role = "owner" | "admin" | "member";
+
 export interface Member {
   id: string;
   name: string;
+  fullName?: string;
   avatar?: string;
   status: MemberStatus;
+  role: Role;
+  joinedAt: number;
 }
-export interface Presence {
+export interface Invite {
   id: string;
-  name: string;
-  avatar: string;
-  note: string;
-  online: boolean;
+  to: string;
+  sentAt: number;
 }
-export type ItemKind = "food" | "movie" | "game" | "dessert" | "other";
 export interface LobbyItem {
   id: string;
   title: string;
   by: string;
+  byId: string;
   kind: ItemKind;
-  mine?: boolean;
+  emoji: string;
+  image?: string;
+  note?: string;
+  price?: string;
+  rating?: string;
+  distance?: string;
+  addedAt: number;
 }
 export interface ChatMsg {
   id: string;
@@ -38,90 +51,115 @@ export interface Lobby {
   id: string;
   code: string;
   name: string;
-  invitedName: string;
   description: string;
-  category: string;
-  squad: Member[];
-  presence: Presence[];
+  kind: LobbyKind;
+  emoji: string;
+  members: Member[];
+  invites: Invite[];
   ready: string[];
   items: LobbyItem[];
   deadline: string;
   requiredMatch: 50 | 75 | 100;
   allowFriends: boolean;
+  linkAccess: boolean;
+  maxMembers: number;
+  locked: boolean;
   chat: ChatMsg[];
   createdAt: number;
 }
 
 export const DEFAULT_LOBBY_ID = "friday-night-42x9";
+export const GAMERS_LOBBY_ID = "weekend-gamers-7kq2";
 
-export const baseSquad = (): Member[] => [
-  { id: "alex", name: "Alex", avatar: av(2), status: "ready" },
-  { id: "priya", name: "Priya", avatar: av(5), status: "adding" },
-  { id: "jordan", name: "Jordan", avatar: av(3), status: "ready" },
-  { id: "sam", name: "Sam", avatar: av(4), status: "thinking" },
-  { id: "you", name: "You", status: "ready" },
-];
+const T0 = 1_760_000_000_000;
 
-export const basePresence = (): Presence[] => [
-  { id: "p1", name: "Alex Rivera", avatar: av(1), note: "Adding options...", online: true },
-  { id: "p2", name: "Sarah Chen", avatar: av(6), note: "Browsing movies", online: true },
-  { id: "p3", name: "Jordan Smith", avatar: av(7), note: "Ready to vote", online: true },
-  { id: "p4", name: "Mia Thompson", avatar: av(8), note: "Last seen 5m ago", online: false },
-];
+const seedMembers = (youRole: Role, ownerId: string): Member[] => {
+  const base: Omit<Member, "role">[] = [
+    { id: "alex", name: "Alex", fullName: "Alex Morgan", avatar: av(2), status: "ready", joinedAt: T0 },
+    { id: "priya", name: "Priya", fullName: "Priya Patel", avatar: av(5), status: "adding", joinedAt: T0 + 1 },
+    { id: "jordan", name: "Jordan", fullName: "Jordan Smith", avatar: av(3), status: "ready", joinedAt: T0 + 2 },
+    { id: "sam", name: "Sam", fullName: "Sam Lee", avatar: av(4), status: "thinking", joinedAt: T0 + 3 },
+    { id: "you", name: "You", status: "ready", joinedAt: T0 + 4 },
+  ];
+  return base.map((m) => ({ ...m, role: m.id === ownerId ? "owner" : m.id === "you" ? youRole : "member" }));
+};
+
+const item = (
+  n: number,
+  title: string,
+  byId: string,
+  by: string,
+  extra: Partial<LobbyItem> = {},
+): LobbyItem => {
+  const v = guessVisual(title);
+  return { id: `i${n}`, title, by, byId, kind: v.kind, emoji: v.emoji, addedAt: T0 + n, ...extra };
+};
 
 export const seedItems = (): LobbyItem[] => [
-  { id: "i1", title: "Artisan Pizza", by: "Alex", kind: "food" },
-  { id: "i2", title: "Interstellar Marathon", by: "Sarah", kind: "movie" },
-  { id: "i3", title: "Catan Night", by: "Jordan", kind: "game" },
-  { id: "i4", title: "Vegan Gelato", by: "Mia", kind: "dessert" },
-  { id: "i5", title: "Spicy Ramen", by: "Priya", kind: "food" },
-  { id: "i6", title: "Mario Kart Tournament", by: "Sam", kind: "game" },
-  { id: "i7", title: "Spirited Away", by: "Mia", kind: "movie" },
-  { id: "i8", title: "Tiramisu Tasting", by: "Alex", kind: "dessert" },
-  { id: "i9", title: "Momo Crawl", by: "Priya", kind: "food" },
+  item(1, "Artisan Pizza", "alex", "Alex", { image: FOOD_IMG.pizza, rating: "4.3", distance: "0.7 MILES", price: "$15", note: "Wood-fired, thin crust, great for sharing." }),
+  item(2, "Interstellar Marathon", "priya", "Priya", { note: "Snacks, blankets and a very long movie." }),
+  item(3, "Catan Night", "jordan", "Jordan"),
+  item(4, "Vegan Gelato", "sam", "Sam"),
+  item(5, "Fresh Pasta Night", "alex", "Alex", { image: FOOD_IMG.pasta, rating: "4.8", distance: "0.8 MILES", price: "$10", note: "Very yummy pasta in local restaurant." }),
+  item(6, "Mario Kart Tournament", "sam", "Sam"),
+  item(7, "Spicy Ramen", "priya", "Priya"),
+  item(8, "Tiramisu Tasting", "alex", "Alex"),
+  item(9, "Momo Crawl", "priya", "Priya", { image: FOOD_IMG.momo, rating: "5.0", distance: "0.7 MILES", price: "$20", note: "Steamed, fried and jhol — all the momo." }),
 ];
 
 export const seedChat = (): ChatMsg[] => [
   { id: "c1", from: "Jordan", text: "Anyone down for a warm-round?" },
-  { id: "c2", from: "Sarah", text: "Just getting my coffee, 2 mins!" },
+  { id: "c2", from: "Priya", text: "Just getting my coffee, 2 mins!" },
 ];
 
-export function makeLobby(partial: Partial<Lobby> & { id: string; name: string }): Lobby {
-  return {
+export const newCode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+export const defaultLobbies = (): Record<string, Lobby> => ({
+  [DEFAULT_LOBBY_ID]: {
+    id: DEFAULT_LOBBY_ID,
     code: "482913",
-    invitedName: partial.name,
-    description:
-      "Collaborate with your group to build the perfect evening. Add your favorites or pick from the templates below.",
-    category: "Friday Night Dinner",
-    squad: baseSquad(),
-    presence: basePresence(),
+    name: "Friday Night Social",
+    description: "Collaborate with your group to build the perfect evening. Add your favorites or pick from the templates below.",
+    kind: "mixed",
+    emoji: "🎉",
+    members: seedMembers("member", "alex"),
+    invites: [],
     ready: ["alex", "jordan", "you"],
     items: seedItems(),
     deadline: "20:00",
-    requiredMatch: 100,
+    requiredMatch: 75,
     allowFriends: true,
+    linkAccess: true,
+    maxMembers: 12,
+    locked: false,
     chat: seedChat(),
-    createdAt: Date.now(),
-    ...partial,
-  };
-}
-
-export const defaultLobbies = (): Record<string, Lobby> => ({
-  [DEFAULT_LOBBY_ID]: makeLobby({
-    id: DEFAULT_LOBBY_ID,
-    name: "Friday Night Social",
-    invitedName: "The Friday Hangout",
-  }),
-  "weekend-gamers-7kq2": makeLobby({
-    id: "weekend-gamers-7kq2",
-    name: "The Weekend Gamers",
-    invitedName: "The Weekend Gamers",
-    category: "Game Night",
+    createdAt: T0,
+  },
+  [GAMERS_LOBBY_ID]: {
+    id: GAMERS_LOBBY_ID,
     code: "731204",
-    ready: ["alex"],
-    items: seedItems().filter((i) => i.kind === "game" || i.kind === "dessert"),
-    createdAt: Date.now() - 86400000 * 2,
-  }),
+    name: "The Weekend Gamers",
+    description: "Saturday game night. Bring snacks, keep the rivalry friendly.",
+    kind: "game",
+    emoji: "🎮",
+    members: seedMembers("owner", "you").filter((m) => m.id !== "alex"),
+    invites: [{ id: "inv-seed", to: "marcus@example.com", sentAt: T0 + 100 }],
+    ready: ["jordan"],
+    items: [
+      item(21, "Catan", "jordan", "Jordan"),
+      item(22, "Mario Kart", "sam", "Sam"),
+      item(23, "Codenames", "priya", "Priya"),
+      item(24, "Smash Bros", "you", "You"),
+    ].map((i) => ({ ...i, id: `g${i.id}` })),
+    deadline: "21:00",
+    requiredMatch: 75,
+    allowFriends: true,
+    linkAccess: true,
+    maxMembers: 8,
+    locked: false,
+    chat: [],
+    createdAt: T0 - 86_400_000 * 2,
+  },
 });
 
 export interface Template {
@@ -130,8 +168,8 @@ export interface Template {
   tag: string;
   tagTone: "yellow" | "gray";
   blurb: string;
-  category: string;
-  kind: ItemKind;
+  kind: LobbyKind;
+  emoji: string;
   items: string[];
 }
 export const templates: Template[] = [
@@ -141,9 +179,9 @@ export const templates: Template[] = [
     tag: "HIGH STAKES",
     tagTone: "yellow",
     blurb: "Competitive trivia and voting streak.",
-    category: "Trivia Night",
     kind: "game",
-    items: ["Pub Trivia", "Charades", "Escape Room"],
+    emoji: "🏆",
+    items: ["Pub Trivia", "Charades", "Escape Room", "Bowling"],
   },
   {
     id: "chill",
@@ -151,35 +189,16 @@ export const templates: Template[] = [
     tag: "CASUAL",
     tagTone: "gray",
     blurb: "Low pressure polls and vibe checks.",
-    category: "Friday Night Dinner",
-    kind: "food",
-    items: ["Sushi Platter", "Taco Truck", "Burger Joint"],
+    kind: "mixed",
+    emoji: "🌙",
+    items: ["Sushi", "Tacos", "Movie Night", "Board Games"],
   },
 ];
 
-export const quickTemplates: { id: string; label: string; sub: string; kind: ItemKind; items: string[] }[] = [
-  { id: "food", label: "Food", sub: "Pizza, Sushi, Burgers...", kind: "food", items: ["Sushi Boat", "Smash Burgers", "Wood-fired Pizza"] },
-  { id: "movies", label: "Movies", sub: "Action, Horror, Indie...", kind: "movie", items: ["Dune: Part Two", "The Substitute", "Past Lives"] },
-  { id: "games", label: "Games", sub: "Board, PC, Retro...", kind: "game", items: ["Codenames", "Overcooked", "Smash Bros"] },
-];
-
-export interface DeckCard {
-  id: string;
-  title: string;
-  price: string;
-  rating: string;
-  distance: string;
-  desc: string;
-  tags: string[];
-  image?: string;
-  kind: ItemKind;
-  /** how many of the 4 friends liked it (seeded) */
-  friendLikes: number;
-}
-export const baseDeck: DeckCard[] = [
-  { id: "pasta", title: "Yummy Pasta", price: "$10", rating: "4.8", distance: "0.8 MILES", desc: "Very yummy pasta in local restaurant. Really really yummy pasta.", tags: ["Italian", "Local"], image: FOOD_IMG.pasta, kind: "food", friendLikes: 4 },
-  { id: "pizza", title: "Yummy Pizza", price: "$15", rating: "4.3", distance: "0.7 MILES", desc: "Very yummy pizza in local restaurant. Really really yummy pizza.", tags: ["Italian", "Local"], image: FOOD_IMG.pizza, kind: "food", friendLikes: 2 },
-  { id: "momo", title: "Yummy Momo", price: "$20", rating: "5.0", distance: "0.7 MILES", desc: "Very yummy momo in local restaurant. Really really yummy momo.", tags: ["Nepali", "Local"], image: FOOD_IMG.momo, kind: "food", friendLikes: 1 },
+export const quickTemplates: { id: LobbyKind; label: string; sub: string; kind: ItemKind; items: string[] }[] = [
+  { id: "food", label: "Food", sub: "Pizza, Sushi, Burgers...", kind: "food", items: ["Sushi", "Smash Burgers", "Wood-fired Pizza"] },
+  { id: "movie", label: "Movies", sub: "Action, Horror, Indie...", kind: "movie", items: ["Dune", "Past Lives", "Knives Out"] },
+  { id: "game", label: "Games", sub: "Board, PC, Retro...", kind: "game", items: ["Codenames", "Overcooked", "Uno"] },
 ];
 
 export interface Notif {
@@ -198,20 +217,22 @@ export interface Notif {
 export const seedNotifs = (): Notif[] => [
   { id: "n1", type: "invite", who: "Priya", avatar: av(5), title: "invited you to a new session", body: "\"Hey! Thought this would be perfect for our group.\"", quote: true, time: "2M AGO", read: false, lobbyId: DEFAULT_LOBBY_ID },
   { id: "n2", type: "match", title: "Match found for", highlight: "Friday Night Dinner!", body: "4 people with similar interests are ready to go.", time: "45M AGO", read: false, lobbyId: DEFAULT_LOBBY_ID },
-  { id: "n3", type: "group", avatar: av(4), title: "New group member joined", highlight: "'The Weekend Gamers'", body: "Marcus and 2 others just hopped in. Say hello!", time: "2H AGO", read: false, lobbyId: "weekend-gamers-7kq2" },
+  { id: "n3", type: "group", avatar: av(4), title: "New group member joined", highlight: "'The Weekend Gamers'", body: "Marcus and 2 others just hopped in. Say hello!", time: "2H AGO", read: false, lobbyId: GAMERS_LOBBY_ID },
   { id: "n4", type: "stats", title: "Your weekly stats are ready", body: "See how many matches you made last week.", time: "YESTERDAY", read: true, lobbyId: DEFAULT_LOBBY_ID },
 ];
 
 export const recents = [
   { id: "r1", title: "Late Night Game", meta: "YESTERDAY • 12 PARTICIPANTS", avatars: [av(2), av(3)], lobbyId: DEFAULT_LOBBY_ID },
-  { id: "r2", title: "Lunch Spot", meta: "3 DAYS AGO • 8 PARTICIPANTS", avatars: [av(5)], initials: "SJ", lobbyId: "weekend-gamers-7kq2" },
+  { id: "r2", title: "Lunch Spot", meta: "3 DAYS AGO • 8 PARTICIPANTS", avatars: [av(5)], initials: "SJ", lobbyId: GAMERS_LOBBY_ID },
 ];
 
 export const faqs = [
   { q: "What is Matchup?", a: "Matchup is a real-time group decision app. Everyone in a lobby swipes on the same options, and the group's most-loved pick wins." },
-  { q: "How do I invite friends?", a: "Open your lobby and copy the invite link, or share the 6-digit session code. Friends can join from the Join Session screen." },
+  { q: "How do I create a lobby?", a: "Tap “New lobby” in the top bar, give it a title, choose what you're deciding on, then invite your friends with a link, code or QR." },
+  { q: "How do I invite friends?", a: "Open your lobby and choose Invite. You can copy the link, share the 6-digit code, show the QR code, or invite people by name or email." },
+  { q: "What can lobby admins do?", a: "Admins can rename the lobby, change its rules, remove options, remove members, and promote other members to admin. The owner can also transfer ownership." },
+  { q: "How do options get pictures?", a: "As you type an option we suggest matches with photos. You can also upload your own photo, and if nothing fits we use a category emoji." },
   { q: "What does 'Required Matches' mean?", a: "It is how much of the group must say yes for something to count as a match. 100% means a unanimous match." },
   { q: "Can I change my vote?", a: "Yes. Use the undo button on the voting screen to step back to your previous card before the deadline." },
-  { q: "Is Matchup free?", a: "Matchup is free for groups of up to 12 people. Larger groups and history export are on the roadmap." },
   { q: "How do I delete my account?", a: "Go to Settings → Account & Privacy → Delete Account. This permanently removes your data and cannot be undone." },
 ];

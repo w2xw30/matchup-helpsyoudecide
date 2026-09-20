@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Compass, Globe, LogOut, Mail, Moon, Settings, Share2, Sun, UserRound, Users } from "lucide-react";
+import { Bell, Compass, Globe, LogOut, Mail, Moon, Plus, Settings, Share2, Sun, UserRound, Users } from "lucide-react";
 import { useStore } from "../../store/useStore";
 import { useUI } from "../../store/ui";
 import { Avatar, ConfirmCard, LinkButton, ToastHost } from "../ui/ui";
 
 const homeish = (p: string) => p === "/" || p.startsWith("/join") && !/^\/join\/.+/.test(p) || p.startsWith("/activity");
 const groupish = (p: string) =>
-  p.startsWith("/groups") || p.startsWith("/lobby") || p.startsWith("/session") || /^\/join\/.+/.test(p);
+  p.startsWith("/groups") || (p.startsWith("/lobby") && p !== "/lobby/new") || p.startsWith("/session") || /^\/join\/.+/.test(p);
 
-export function Navbar({ themeToggle }: { themeToggle?: boolean }) {
+export function Navbar() {
   const { pathname } = useLocation();
   const user = useStore((s) => s.user);
   const unread = useStore((s) => s.notifs.some((n) => !n.read));
@@ -53,6 +53,9 @@ export function Navbar({ themeToggle }: { themeToggle?: boolean }) {
         <div className="nav-right">
           {user ? (
             <>
+              <Link to="/lobby/new" className="nav-new">
+                <Plus size={16} strokeWidth={2.4} /> <span>New lobby</span>
+              </Link>
               <Link to="/notifications" className="nav-bell" aria-label={unread ? "Notifications (unread)" : "Notifications"}>
                 <Bell size={18} />
                 {unread && <span className="nav-bell-dot" />}
@@ -67,6 +70,9 @@ export function Navbar({ themeToggle }: { themeToggle?: boolean }) {
                       <strong>{user.name}</strong>
                       <span>{user.email}</span>
                     </div>
+                    <button role="menuitem" onClick={() => nav("/lobby/new")}>
+                      <Plus size={16} /> Create lobby
+                    </button>
                     <button role="menuitem" onClick={() => nav("/settings")}>
                       <Settings size={16} /> Settings
                     </button>
@@ -97,11 +103,6 @@ export function Navbar({ themeToggle }: { themeToggle?: boolean }) {
           )}
         </div>
       </nav>
-      {themeToggle && (
-        <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
-          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
-      )}
     </header>
   );
 }
@@ -158,13 +159,14 @@ export function BottomNav() {
   const items = [
     { to: "/", label: "Discover", icon: <Compass size={20} />, on: homeish(pathname) },
     { to: "/groups", label: "Sessions", icon: <Users size={20} />, on: groupish(pathname) },
+    { to: "/lobby/new", label: "Create", icon: <Plus size={22} strokeWidth={2.6} />, on: pathname === "/lobby/new", primary: true },
     { to: "/notifications", label: "Alerts", icon: <Bell size={20} />, on: pathname.startsWith("/notifications") },
     { to: "/settings", label: "Profile", icon: <UserRound size={20} />, on: pathname.startsWith("/settings") },
   ];
   return (
     <nav className="bottom-nav" aria-label="Primary">
       {items.map((i) => (
-        <NavLink key={i.to} to={i.to} className={i.on ? "active" : ""}>
+        <NavLink key={i.to} to={i.to} className={[i.on ? "active" : "", "primary" in i && i.primary ? "primary" : ""].join(" ").trim()}>
           <span className="bn-icon">{i.icon}</span>
           {i.label}
         </NavLink>
@@ -195,14 +197,14 @@ export function LogoutHost() {
 }
 
 /** Standard page chrome: floating navbar, content, footer, mobile bottom nav. */
-export function AppShell({ children, themeToggle, wide }: { children?: ReactNode; themeToggle?: boolean; wide?: boolean }) {
+export function AppShell({ children, wide }: { children?: ReactNode; wide?: boolean }) {
   const { pathname } = useLocation();
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [pathname]);
   return (
     <div className="page">
-      <Navbar themeToggle={themeToggle} />
+      <Navbar />
       <main className={`page-main ${wide ? "wide" : ""}`}>{children ?? <Outlet />}</main>
       <Footer />
       <BottomNav />

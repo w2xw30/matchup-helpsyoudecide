@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown, Globe, Lock, MonitorSmartphone, Plus, Smartphone, TrendingUp, Users, Zap } from "lucide-react";
-import { av, recents, templates } from "../data/mock";
+import { av, recents } from "../data/mock";
+import { isMember, myRole, roleLabel } from "../lib/perms";
 import { useStore } from "../store/useStore";
 import { Avatar, AvatarStack, Button, Chip, ConfirmCard, LinkButton, TextField, Toggle } from "./../components/ui/ui";
 import { faqs } from "../data/mock";
@@ -9,10 +10,10 @@ import { faqs } from "../data/mock";
 /* ---------------- Groups ---------------- */
 export function Groups() {
   const lobbyMap = useStore((s) => s.lobbies);
-  const lobbies = useMemo(() => Object.values(lobbyMap).sort((a, b) => b.createdAt - a.createdAt), [lobbyMap]);
-  const create = useStore((s) => s.createLobbyFromTemplate);
-  const toast = useStore((s) => s.toast);
-  const nav = useNavigate();
+  const lobbies = useMemo(
+    () => Object.values(lobbyMap).filter((l) => isMember(l)).sort((a, b) => b.createdAt - a.createdAt),
+    [lobbyMap],
+  );
   return (
     <div className="doc-wide">
       <div className="page-head">
@@ -24,31 +25,39 @@ export function Groups() {
           <LinkButton to="/join" variant="soft" pill>
             Join Session <Zap size={15} />
           </LinkButton>
-          <Button
-            pill
-            onClick={() => {
-              const id = create(templates[1]);
-              toast("New lobby created");
-              nav(`/lobby/${id}/customize`);
-            }}
-          >
+          <LinkButton to="/lobby/new" pill>
             <Plus size={16} /> New lobby
-          </Button>
+          </LinkButton>
         </div>
       </div>
+      {lobbies.length === 0 && (
+        <div className="empty-state">
+          <Users size={28} />
+          <p>You're not in any lobbies yet.</p>
+          <LinkButton to="/lobby/new" pill>
+            Create your first lobby
+          </LinkButton>
+        </div>
+      )}
       <div className="group-grid">
         {lobbies.map((l) => {
           const ready = l.ready.length;
+          const role = myRole(l)!;
           return (
             <article key={l.id} className="tpl-card group-card">
               <div className="tpl-top">
-                <span className={`pill ${ready >= l.squad.length ? "pill-yellow" : "pill-gray"}`}>{ready >= l.squad.length ? "ALL READY" : `${ready}/${l.squad.length} READY`}</span>
+                <span className={`pill ${ready >= l.members.length ? "pill-yellow" : "pill-gray"}`}>
+                  {ready >= l.members.length ? "ALL READY" : `${ready}/${l.members.length} READY`}
+                </span>
+                <span className={`role-badge role-${role}`}>{roleLabel(role)}</span>
               </div>
-              <h3>{l.name}</h3>
+              <h3>
+                <span aria-hidden>{l.emoji}</span> {l.name}
+              </h3>
               <p>
-                {l.category} · {l.items.length} options
+                {l.items.length} options · {l.members.length} {l.members.length === 1 ? "member" : "members"}
               </p>
-              <AvatarStack avatars={l.squad.filter((m) => m.avatar).map((m) => m.avatar!)} extra={`${l.squad.length}`} size={28} />
+              <AvatarStack avatars={l.members.filter((m) => m.avatar).slice(0, 4).map((m) => m.avatar!)} extra={`${l.members.length}`} size={28} />
               <div className="group-actions">
                 <Link to={`/lobby/${l.id}`} className="tpl-create">
                   Open lobby
@@ -57,7 +66,7 @@ export function Groups() {
                   Vote
                 </Link>
                 <Link to={`/lobby/${l.id}/customize`} className="tpl-create alt">
-                  Edit
+                  Options
                 </Link>
               </div>
             </article>

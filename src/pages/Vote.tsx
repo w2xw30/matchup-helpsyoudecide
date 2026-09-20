@@ -1,40 +1,44 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Check, Gamepad2, Info, PartyPopper, Pizza, Clapperboard, IceCreamCone, Lightbulb, Star, Undo2, X } from "lucide-react";
-import type { DeckCard, ItemKind } from "../data/mock";
-import { av } from "../data/mock";
+import { Check, Info, PartyPopper, PlusCircle, Star, Undo2, X } from "lucide-react";
+import { av, type LobbyItem } from "../data/mock";
+import { KIND_META } from "../lib/catalog";
 import { buildDeck, computeResult } from "../lib/deck";
+import { isMember } from "../lib/perms";
 import { useStore } from "../store/useStore";
-import { AvatarStack, Button, Modal } from "../components/ui/ui";
+import { AvatarStack, Button, LinkButton, Modal } from "../components/ui/ui";
+import { ItemArt, ItemThumb } from "../components/lobby/visual";
 
-const KIND_ICON: Record<ItemKind, typeof Pizza> = { food: Pizza, movie: Clapperboard, game: Gamepad2, dessert: IceCreamCone, other: Lightbulb };
-
-export function CardFace({ card, stamp }: { card: DeckCard; stamp?: "like" | "nope" | null }) {
-  const Icon = KIND_ICON[card.kind];
+export function CardFace({ item, stamp }: { item: LobbyItem; stamp?: "like" | "nope" | null }) {
+  const meta = KIND_META[item.kind];
+  const byline = item.byId === "you" ? "you" : item.by;
   return (
     <div className="swipe-card">
-      <div className={`sc-image ${card.image ? "" : "sc-art"}`}>
-        {card.image ? <img src={card.image} alt={card.title} draggable={false} /> : <Icon size={72} strokeWidth={1.4} />}
+      <div className="sc-image">
+        <ItemArt item={item} />
         <div className="sc-chips">
-          <span className="chip-glass rating">
-            <Star size={11} fill="currentColor" /> {card.rating}
-          </span>
-          <span className="chip-glass">{card.distance}</span>
+          {item.rating ? (
+            <span className="chip-glass rating">
+              <Star size={11} fill="currentColor" /> {item.rating}
+            </span>
+          ) : (
+            <span className="chip-glass">
+              <span aria-hidden>{meta.emoji}</span> {meta.label.toUpperCase()}
+            </span>
+          )}
+          <span className="chip-glass">{item.distance ?? `ADDED BY ${byline.toUpperCase()}`}</span>
         </div>
         {stamp && <span className={`stamp stamp-${stamp}`}>{stamp === "like" ? "MATCH" : "NOPE"}</span>}
       </div>
       <div className="sc-body">
         <div className="sc-title">
-          <h2>{card.title}</h2>
-          <span className="price">{card.price}</span>
+          <h2>{item.title}</h2>
+          {item.price && <span className="price">{item.price}</span>}
         </div>
-        <p>{card.desc}</p>
+        <p>{item.note ?? `A ${meta.label.toLowerCase().replace(/s$/, "")} pick added by ${byline}. Swipe right if you're in.`}</p>
         <div className="tags">
-          {card.tags.map((t) => (
-            <span key={t} className="tag">
-              {t.toUpperCase()}
-            </span>
-          ))}
+          <span className="tag">{meta.label.toUpperCase()}</span>
+          <span className="tag">BY {byline.toUpperCase()}</span>
         </div>
       </div>
     </div>
@@ -53,17 +57,18 @@ export function Vote() {
   const resetVotes = useStore((s) => s.resetVotes);
 
   const deck = useMemo(() => buildDeck(lobby), [lobby]);
-  const index = vote?.order.length ?? 0;
-  const done = index >= deck.length;
-  const card = deck[index];
-  const next = deck[index + 1];
+  const answers = vote?.answers;
+  const index = answers ? deck.filter((c) => answers[c.id]).length : 0;
+  const done = deck.length > 0 && index >= deck.length;
+  const card = answers ? deck.find((c) => !answers[c.id]) : deck[0];
+  const next = deck.find((c) => c !== card && !(answers && answers[c.id]));
 
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [exit, setExit] = useState<"like" | "nope" | null>(null);
   const [info, setInfo] = useState(false);
   const [dismissedAt, setDismissedAt] = useState(-1);
-  const celebrate = done && dismissedAt !== index && deck.length > 0;
+  const celebrate = done && dismissedAt !== index;
   const setCelebrate = (open: boolean) => setDismissedAt(open ? -1 : index);
   const start = useRef(0);
   const busy = useRef(false);
@@ -97,7 +102,22 @@ export function Vote() {
     return () => window.removeEventListener("keydown", onKey);
   }, [commit, undoVote, id, info, celebrate]);
 
-  if (!lobby) return <Navigate to="/groups" replace />;
+  if (!lobby || !isMember(lobby)) return <Navigate to="/groups" replace />;
+
+  if (deck.length < 2) {
+    return (
+      <div className="vote-empty">
+        <span className="emoji-big lg" aria-hidden>
+          {lobby.emoji}
+        </span>
+        <h1>Not enough options yet</h1>
+        <p>Add at least two options to “{lobby.name}” so there's something to vote on.</p>
+        <LinkButton to={`/lobby/${id}/customize`} pill size="lg">
+          <PlusCircle size={16} /> Add options
+        </LinkButton>
+      </div>
+    );
+  }
 
   const dir = exit ?? (dx > 40 ? "like" : dx < -40 ? "nope" : null);
   const x = exit === "like" ? 520 : exit === "nope" ? -520 : dx;
@@ -107,7 +127,8 @@ export function Vote() {
     opacity: exit ? 0 : 1,
   };
 
-  const voters = lobby.squad.length;
+  const voters = lobby.members.length;
+  const others = lobby.members.filter((m) => m.avatar).slice(0, 4);
 
   return (
     <div className="vote-page">
@@ -116,15 +137,15 @@ export function Vote() {
           <p className="vote-progress" aria-live="polite">
             <span>{index + 1}</span> of {deck.length}
             <span className="dots" aria-hidden>
-              {deck.map((c, i) => (
-                <i key={c.id} className={i < index ? "done" : i === index ? "now" : ""} />
+              {deck.slice(0, 14).map((c) => (
+                <i key={c.id} className={answers?.[c.id] ? "done" : c === card ? "now" : ""} />
               ))}
             </span>
           </p>
           <div className="deck">
             {next && (
               <div className="deck-under" aria-hidden>
-                <CardFace card={next} />
+                <CardFace item={next} />
               </div>
             )}
             <div
@@ -151,7 +172,7 @@ export function Vote() {
                 setDx(0);
               }}
             >
-              <CardFace card={card} stamp={dir} />
+              <CardFace item={card} stamp={dir} />
             </div>
           </div>
           <div className="vote-controls">
@@ -174,12 +195,7 @@ export function Vote() {
           <p className="eyebrow muted">You've voted on all {deck.length} options</p>
           <div className="vote-done-actions">
             <Button onClick={() => setCelebrate(true)}>See results</Button>
-            <Button
-              variant="soft"
-              onClick={() => {
-                resetVotes(id);
-              }}
-            >
+            <Button variant="soft" onClick={() => resetVotes(id)}>
               Vote again
             </Button>
           </div>
@@ -192,14 +208,18 @@ export function Vote() {
             <button type="button" className="modal-x" onClick={() => setInfo(false)} aria-label="Close">
               <X size={16} />
             </button>
-            <h3>{card.title}</h3>
+            <div className="info-head">
+              <ItemThumb item={card} size={56} round={false} />
+              <h3>{card.title}</h3>
+            </div>
             <dl>
-              <div><dt>Rating</dt><dd>★ {card.rating}</dd></div>
-              <div><dt>Distance</dt><dd>{card.distance.toLowerCase()}</dd></div>
-              <div><dt>Price</dt><dd>{card.price}</dd></div>
-              <div><dt>Group appetite</dt><dd>{card.friendLikes} of {voters - 1} friends leaning yes</dd></div>
+              <div><dt>Category</dt><dd>{KIND_META[card.kind].label}</dd></div>
+              <div><dt>Added by</dt><dd>{card.byId === "you" ? "You" : card.by}</dd></div>
+              {card.rating && <div><dt>Rating</dt><dd>★ {card.rating}</dd></div>}
+              {card.distance && <div><dt>Distance</dt><dd>{card.distance.toLowerCase()}</dd></div>}
+              {card.price && <div><dt>Price</dt><dd>{card.price}</dd></div>}
             </dl>
-            <p>{card.desc}</p>
+            {card.note && <p>{card.note}</p>}
             <Button block onClick={() => setInfo(false)} data-autofocus>
               Got it
             </Button>
@@ -219,8 +239,10 @@ export function Vote() {
             Reveal the Match
           </Button>
           <div className="cel-people">
-            <AvatarStack avatars={[av(2), av(5), av(3), av(4)]} size={26} />
-            <small>All {voters} group members voted</small>
+            <AvatarStack avatars={others.length ? others.map((m) => m.avatar!) : [av(2)]} size={26} />
+            <small>
+              All {voters} group {voters === 1 ? "member" : "members"} voted
+            </small>
           </div>
           <Link to={`/lobby/${id}`} className="link-inline" onClick={() => setCelebrate(false)}>
             Back to lobby
@@ -239,23 +261,48 @@ export function Result() {
   const nav = useNavigate();
   const deck = useMemo(() => buildDeck(lobby), [lobby]);
 
-  if (!lobby) return <Navigate to="/groups" replace />;
-  if (!vote || vote.order.length < deck.length) return <Navigate to={`/session/${id}/vote`} replace />;
+  if (!lobby || !isMember(lobby)) return <Navigate to="/groups" replace />;
+  const answered = vote ? deck.filter((c) => vote.answers[c.id]).length : 0;
+  if (!vote || deck.length < 2 || answered < deck.length) return <Navigate to={`/session/${id}/vote`} replace />;
 
-  const r = computeResult(deck, vote.answers, lobby.squad.length);
+  const r = computeResult(deck, vote.answers, lobby.members, lobby.requiredMatch);
+  if (!r.winner) return <Navigate to={`/session/${id}/vote`} replace />;
+  const youLiked = vote.answers[r.winner.id] === "like";
+
   return (
     <div className="result">
-      <span className="pill pill-yellow pill-lg">
-        <PartyPopper size={15} /> {r.unanimous ? "IT'S A UNANIMOUS MATCH!" : "THE TOP PICK IS IN!"}
+      <span className={`pill pill-lg ${r.matched ? "pill-yellow" : "pill-gray"}`}>
+        <PartyPopper size={15} /> {r.unanimous ? "IT'S A UNANIMOUS MATCH!" : r.matched ? "THE GROUP HAS A MATCH!" : "NO FULL MATCH — CLOSEST PICK"}
       </span>
-      <h1>The Group Has Spoken</h1>
+      <h1>{r.matched ? "The Group Has Spoken" : "Closest to a Match"}</h1>
       <div className="result-card">
-        <CardFace card={r.winner} />
+        <CardFace item={r.winner} />
       </div>
       <p className="result-note">
-        {r.score} of {r.voters} people picked this
-        {vote.answers[r.winner.id] === "like" ? "" : " — you passed, but the group loved it"}.
+        {r.likes} of {r.voters} {r.voters === 1 ? "person" : "people"} picked this ({r.pct}%)
+        {r.matched ? "" : ` — you needed ${lobby.requiredMatch}%`}
+        {youLiked ? "" : " — you passed, but the group leaned in"}.
       </p>
+
+      <section className="ranking card" aria-label="All results">
+        <h3>How everyone voted</h3>
+        <ol>
+          {r.ranked.map(({ item, likes }, i) => (
+            <li key={item.id} className={i === 0 ? "top" : ""}>
+              <span className="rk-n">{i + 1}</span>
+              <ItemThumb item={item} size={34} round={false} />
+              <span className="rk-title">{item.title}</span>
+              <span className="rk-bar" aria-hidden>
+                <i style={{ width: `${(likes / r.voters) * 100}%` }} />
+              </span>
+              <span className="rk-count">
+                {likes}/{r.voters}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       <div className="result-actions">
         <Button pill size="lg" onClick={() => nav(`/lobby/${id}`)}>
           Back to Lobby
