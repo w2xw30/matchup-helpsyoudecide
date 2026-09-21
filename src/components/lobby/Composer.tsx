@@ -4,7 +4,7 @@ import { KIND_META, POPULAR, guessVisual, type ItemKind } from "../../lib/catalo
 import { searchSuggestions, type Suggestion } from "../../lib/wiki";
 import { fileToDataUrl } from "../../lib/image";
 import type { Lobby, LobbyItem } from "../../data/mock";
-import { useStore } from "../../store/useStore";
+import { useStore, validUrl } from "../../store/useStore";
 import { Button, Modal } from "../ui/ui";
 import { ItemThumb } from "./visual";
 
@@ -62,6 +62,7 @@ function PhotoButton({ image, onChange }: { image?: string; onChange: (v?: strin
 /** "Add an option" panel: type → instant emoji guess → live photo suggestions → optional upload. */
 export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?: boolean; onAdded?: () => void }) {
   const addItem = useStore((s) => s.addItem);
+  const addItems = useStore((s) => s.addItems);
   const toast = useStore((s) => s.toast);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<ItemKind | null>(null);
@@ -69,6 +70,9 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
   const [emoji, setEmoji] = useState<string | undefined>();
   const [note, setNote] = useState("");
   const [price, setPrice] = useState("");
+  const [url, setUrl] = useState("");
+  const [bulk, setBulk] = useState(false);
+  const [bulkText, setBulkText] = useState("");
   const [details, setDetails] = useState(false);
   const [res, setRes] = useState<{ q: string; list: Suggestion[]; failed: boolean }>({ q: "", list: [], failed: false });
   const [open, setOpen] = useState(false);
@@ -113,6 +117,7 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
     setEmoji(undefined);
     setNote("");
     setPrice("");
+    setUrl("");
     setPicked(null);
     setFromSuggestion(false);
     setError("");
@@ -141,7 +146,12 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
       setError("That option is already in the lobby.");
       return;
     }
-    const item = addItem(lobby.id, { title: t, kind: effKind, emoji: effEmoji, image, note, price });
+    if (url.trim() && !validUrl(url)) {
+      setError("The link should start with http:// or https://");
+      setDetails(true);
+      return;
+    }
+    const item = addItem(lobby.id, { title: t, kind: effKind, emoji: effEmoji, image, note, price, url });
     if (item) {
       toast(`"${item.title}" added to the lobby`);
       onAdded?.();
@@ -150,14 +160,65 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
     }
   };
 
+  // "Paste a list": one option per line (bullets, numbers and commas are fine).
+  const parsed = Array.from(
+    new Map(
+      bulkText
+        .split(/\n|;|,(?=\s*\S)/)
+        .map((l) => l.replace(/^[\s\-*•\d.)]+/, "").trim())
+        .filter((l) => l.length >= 2 && l.length <= 60)
+        .map((l) => [l.toLowerCase(), l] as const),
+    ).values(),
+  );
+  const existing = new Set(lobby.items.map((i) => i.title.toLowerCase()));
+  const fresh = parsed.filter((l) => !existing.has(l.toLowerCase()));
+  const addBulk = () => {
+    const n = addItems(lobby.id, fresh);
+    if (n) {
+      toast(`${n} option${n === 1 ? "" : "s"} added`);
+      onAdded?.();
+      setBulkText("");
+      setBulk(false);
+    }
+  };
+
   const popular = POPULAR[lobby.kind].filter((p) => !lobby.items.some((i) => i.title.toLowerCase() === p.toLowerCase())).slice(0, 6);
 
   return (
-    <form className="composer" onSubmit={submit} noValidate>
+    <form className={`composer ${bulk ? "bulk" : ""}`} onSubmit={submit} noValidate>
       <div className="composer-head">
         <h3>Add an Option</h3>
-        <span className="composer-hint">Type anything — we'll find a picture.</span>
+        <span className="composer-hint">
+          {bulk ? "One option per line." : "Type anything — we'll find a picture."}{" "}
+          <button type="button" className="link-inline" onClick={() => setBulk((b) => !b)}>
+            {bulk ? "Add one at a time" : "Paste a list"}
+          </button>
+        </span>
       </div>
+
+      {bulk && (
+        <div className="paste-box">
+          <textarea
+            rows={6}
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder={"Pizza\nSushi\nTacos\nBowling night"}
+            aria-label="Options, one per line"
+            disabled={disabled}
+            autoFocus
+          />
+          <div className="paste-foot">
+            <small>
+              {parsed.length === 0
+                ? "Paste or type your options."
+                : `${fresh.length} new${parsed.length - fresh.length > 0 ? ` · ${parsed.length - fresh.length} already in the lobby` : ""}`}
+            </small>
+            <Button pill onClick={addBulk} disabled={fresh.length === 0 || disabled}>
+              Add {fresh.length || ""} option{fresh.length === 1 ? "" : "s"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="composer-row">
         <ItemThumb item={preview} size={52} round={false} />
@@ -242,12 +303,13 @@ export function Composer({ lobby, disabled, onAdded }: { lobby: Lobby; disabled?
               }}
             />
             <button type="button" className="link-inline" onClick={() => setDetails((d) => !d)}>
-              {details ? "Hide details" : "Add note or price"}
+              {details ? "Hide details" : "Add note, link or price"}
             </button>
           </div>
           {details && (
-            <div className="composer-details">
+            <div className="composer-details three">
               <input placeholder="Note (optional) — why this one?" value={note} onChange={(e) => setNote(e.target.value)} maxLength={140} aria-label="Note" />
+              <input placeholder="Link (map or website)" value={url} onChange={(e) => setUrl(e.target.value)} maxLength={300} inputMode="url" aria-label="Link" />
               <input placeholder="Price e.g. $12" value={price} onChange={(e) => setPrice(e.target.value)} maxLength={12} aria-label="Price" />
             </div>
           )}
@@ -296,13 +358,15 @@ function EditorBody({ lobby, item, onClose }: { lobby: Lobby; item: LobbyItem; o
   const [image, setImage] = useState(item.image);
   const [note, setNote] = useState(item.note ?? "");
   const [price, setPrice] = useState(item.price ?? "");
+  const [url, setUrl] = useState(item.url ?? "");
   const [error, setError] = useState("");
   const save = (e: FormEvent) => {
     e.preventDefault();
     const t = title.trim();
     if (t.length < 2) return setError("Give the option a name (2+ characters).");
     if (lobby.items.some((i) => i.id !== item.id && i.title.toLowerCase() === t.toLowerCase())) return setError("Another option already has that name.");
-    updateItem(lobby.id, item.id, { title: t, kind, emoji, image, note, price });
+    if (url.trim() && !validUrl(url)) return setError("The link should start with http:// or https://");
+    updateItem(lobby.id, item.id, { title: t, kind, emoji, image, note, price, url });
     toast("Changes Saved");
     onClose();
   };
@@ -335,6 +399,10 @@ function EditorBody({ lobby, item, onClose }: { lobby: Lobby; item: LobbyItem; o
         Note
       </label>
       <input id="ed-note" className="sheet-input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={140} />
+      <label className="sheet-label" htmlFor="ed-url">
+        Link
+      </label>
+      <input id="ed-url" className="sheet-input" value={url} onChange={(e) => (setUrl(e.target.value), setError(""))} maxLength={300} placeholder="https://" inputMode="url" />
       <label className="sheet-label" htmlFor="ed-price">
         Price
       </label>

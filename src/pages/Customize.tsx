@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Film, Gamepad2, Lightbulb, Lock, Pencil, PlusCircle, Settings2, Trash2, Utensils } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Film, Gamepad2, Lightbulb, Lock, Pencil, PlusCircle, Settings2, Trash2, Utensils } from "lucide-react";
 import { KIND_META } from "../lib/catalog";
 import { canAddItems, canEditItem, isAdmin, isMember } from "../lib/perms";
 import { useSimulatedJoins } from "../lib/hooks";
 import { quickTemplates, type LobbyItem } from "../data/mock";
-import { useStore } from "../store/useStore";
+import { sortedItems, useStore } from "../store/useStore";
 import { Avatar, Button, Toggle } from "../components/ui/ui";
 import { Composer, ItemEditor } from "../components/lobby/Composer";
 import { InviteModal } from "../components/lobby/Modals";
@@ -27,6 +27,7 @@ export function Customize() {
   const user = useStore((s) => s.user);
   const addItems = useStore((s) => s.addItems);
   const removeItem = useStore((s) => s.removeItem);
+  const moveItem = useStore((s) => s.moveItem);
   const updateLobby = useStore((s) => s.updateLobby);
   const toast = useStore((s) => s.toast);
   const [showAll, setShowAll] = useState(false);
@@ -41,7 +42,7 @@ export function Customize() {
 
   const admin = isAdmin(lobby);
   const canAdd = canAddItems(lobby);
-  const items = [...lobby.items].sort((a, b) => a.addedAt - b.addedAt);
+  const items = sortedItems(lobby.items);
   const shown = showAll ? items : items.slice(0, 4);
   const tally = items.reduce<Record<string, number>>((acc, i) => ({ ...acc, [i.kind]: (acc[i.kind] ?? 0) + 1 }), {});
   const topKind = Object.entries(tally).sort((a, b) => b[1] - a[1])[0]?.[0] as keyof typeof KIND_META | undefined;
@@ -95,8 +96,8 @@ export function Customize() {
             <div className="locked-note">
               <Lock size={18} />
               <div>
-                <strong>{lobby.locked ? "This lobby is locked" : "Only admins can add options here"}</strong>
-                <p>{lobby.locked ? "Options are frozen — head to the lobby to vote." : "Ask an admin to allow members to add options."}</p>
+                <strong>{lobby.locked ? "This lobby is locked" : lobby.phase === "voting" ? "Voting is open" : "Only admins can add options here"}</strong>
+                <p>{lobby.locked ? "Options are frozen — head to the lobby to vote." : lobby.phase === "voting" ? "Options are frozen while everyone votes. End voting in the lobby to make changes." : "Ask an admin to allow members to add options."}</p>
               </div>
             </div>
           )}
@@ -119,7 +120,7 @@ export function Customize() {
               <PlusCircle size={18} /> Add New Option
             </button>
           )}
-          {shown.map((it) => (
+          {shown.map((it, idx) => (
             <div key={it.id} className="contrib">
               <ItemThumb item={it} size={40} />
               <div className="c-text">
@@ -129,6 +130,16 @@ export function Customize() {
                   {it.note ? ` · ${it.note}` : ""}
                 </small>
               </div>
+              {admin && !lobby.locked && items.length > 1 && (
+                <span className="c-actions move" aria-label={`Reorder ${it.title}`}>
+                  <button type="button" aria-label={`Move ${it.title} up`} disabled={idx === 0} onClick={() => moveItem(id, it.id, -1)}>
+                    <ChevronUp size={13} />
+                  </button>
+                  <button type="button" aria-label={`Move ${it.title} down`} disabled={idx === items.length - 1} onClick={() => moveItem(id, it.id, 1)}>
+                    <ChevronDown size={13} />
+                  </button>
+                </span>
+              )}
               {canEditItem(lobby, it) && (
                 <span className="c-actions">
                   <button type="button" aria-label={`Edit ${it.title}`} onClick={() => setEditing(it)}>

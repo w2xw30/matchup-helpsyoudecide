@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, Clock, Copy, Crown, ListChecks, Lock, PlusCircle, QrCode, Settings2, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { KIND_META, LOBBY_KINDS } from "../lib/catalog";
+import { IS_BACKEND } from "../backend/config";
 import { isAdmin, isMember, myRole, roleLabel } from "../lib/perms";
 import { useSimulatedJoins } from "../lib/hooks";
-import { useStore } from "../store/useStore";
+import { buildDeck, doneMembers, voteKey } from "../lib/deck";
+import { net, useStore } from "../store/useStore";
 import type { Member } from "../data/mock";
 import { Avatar, Button, ConfirmCard } from "../components/ui/ui";
 import { inviteDisplay, inviteUrl } from "../lib/url";
@@ -18,14 +20,14 @@ const to12h = (t: string) => {
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 };
 
-function MemberCard({ m, ready, avatar }: { m: Member; ready: boolean; avatar?: string }) {
+function MemberCard({ m, ready, avatar, youName }: { m: Member; ready: boolean; avatar?: string; youName: string }) {
   const you = m.id === "you";
   const state = ready ? "ready" : m.status === "ready" ? "thinking" : m.status;
   const ring = state === "ready" ? "var(--crimson)" : state === "adding" ? "#e6cf6b" : "#c8c6d0";
   const dot = state === "ready" ? "ready" : state === "adding" ? "away" : "offline";
   return (
     <div className="member-card">
-      <Avatar src={you ? avatar : m.avatar} name={you ? "You" : m.name} size={48} status={dot} ring={ring} />
+      <Avatar src={you ? avatar : m.avatar} name={you ? youName : m.name} size={48} status={dot} ring={ring} />
       <div className="mc-text">
         <strong>
           {m.name}
@@ -49,6 +51,11 @@ export function LobbyPage() {
   const setMemberStatus = useStore((s) => s.setMemberStatus);
   const sendChat = useStore((s) => s.sendChat);
   const leave = useStore((s) => s.leaveLobby);
+  const reopen = useStore((s) => s.reopenLobby);
+  const startVoting = useStore((s) => s.startVoting);
+  const endVoting = useStore((s) => s.endVoting);
+  const revealResults = useStore((s) => s.revealResults);
+  const myAnswers = useStore((s) => (lobby ? s.votes[voteKey(lobby)]?.answers : undefined));
   const toast = useStore((s) => s.toast);
   const [draft, setDraft] = useState("");
   const [members, setMembers] = useState(false);
@@ -66,12 +73,31 @@ export function LobbyPage() {
 
   // Friends lock in one by one while the user is in the lobby (prototype simulation).
   useEffect(() => {
-    if (!lobby || allReady) return;
+    if (IS_BACKEND || !lobby || allReady) return;
     const next = lobby.members.find((m) => m.id !== "you" && !lobby.ready.includes(m.id));
     if (!next) return;
     const t = setTimeout(() => setMemberStatus(id, next.id, true), 6000);
     return () => clearTimeout(t);
   }, [lobby, allReady, id, setMemberStatus]);
+
+  // Local prototype: the seeded lobbies have a simulated host who opens voting once everyone is ready.
+  useEffect(() => {
+    if (IS_BACKEND || !lobby || lobby.phase === "voting" || lobby.decision || isAdmin(lobby)) return;
+    if (!allReady || total < 2 || lobby.items.length < 2) return;
+    const host = lobby.members.find((m) => m.role === "owner")?.name ?? "The host";
+    const t = setTimeout(() => {
+      startVoting(id);
+      toast(`${host} started voting`, "info");
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [lobby, allReady, total, id, startVoting, toast]);
+
+  // Online: keep the "who has finished" progress fresh while voting is open (others' votes are hidden until the end).
+  useEffect(() => {
+    if (!IS_BACKEND || lobby?.phase !== "voting") return;
+    const t = setInterval(() => net.refreshLobby?.(id), 3000);
+    return () => clearInterval(t);
+  }, [lobby?.phase, id]);
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ block: "nearest" });
@@ -98,13 +124,16 @@ export function LobbyPage() {
     sendChat(id, draft);
     setDraft("");
     const other = lobby.members.find((m) => m.id !== "you");
-    if (other) {
+    if (other && !IS_BACKEND) {
       setTimeout(() => sendChat(id, REPLIES[Math.floor(Math.random() * REPLIES.length)], other.name, false), 1400);
     }
   };
 
   const youReady = lobby.ready.includes("you");
   const remaining = total - readyCount;
+  const voting = lobby.phase === "voting" && !lobby.decision;
+  const done = doneMembers(lobby, buildDeck(lobby), myAnswers);
+  const iFinished = done.includes("you");
   const kindLabel = lobby.kind === "mixed" ? "Anything goes" : KIND_META[lobby.kind].label;
 
   return (
@@ -140,58 +169,123 @@ export function LobbyPage() {
         </div>
       </header>
 
+      {lobby.decision && (
+        <div className="decision-banner" role="status">
+          <span className="emoji-big md" aria-hidden>
+            {lobby.decision.emoji}
+          </span>
+          <div className="db-text">
+            <small>DECIDED · LOCKED IN BY {lobby.decision.byName.toUpperCase()}</small>
+            <strong>{lobby.decision.title}</strong>
+          </div>
+          <Button size="sm" pill onClick={() => nav(`/session/${lobby.id}/result`)}>
+            See result
+          </Button>
+          {admin && (
+            <Button size="sm" pill variant="soft" onClick={() => reopen(lobby.id)}>
+              Reopen
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="lobby-page">
         <div className="lobby-left">
-          <section className="card readiness">
-            <span className="eyebrow muted">Group Readiness</span>
-            <div className="ready-count" aria-live="polite">
-              <span>
-                {readyCount}/{total}
-              </span>
-              <small>READY</small>
-            </div>
-            <p>
-              {!canStart
-                ? "Add at least 2 options so everyone has something to vote on."
-                : allReady
-                  ? total === 1
-                    ? "You're all set. Invite friends or start voting on your own."
-                    : "Everyone's locked in. Time to find your match!"
-                  : total === 1
-                    ? "It's just you so far. Invite friends, or tap ready to vote solo."
-                    : remaining === 1
-                    ? "Almost there! Just waiting for 1 more friend to lock in."
-                    : `Almost there! Just waiting for ${remaining} more friends to lock in.`}
-            </p>
-            {!canStart ? (
-              <Button size="lg" onClick={() => nav(`/lobby/${lobby.id}/customize`)}>
-                <PlusCircle size={16} /> Add options
+          {voting ? (
+            <section className="card readiness voting">
+              <span className="eyebrow muted">Voting is open</span>
+              <div className="ready-count" aria-live="polite">
+                <span>
+                  {done.length}/{total}
+                </span>
+                <small>FINISHED</small>
+              </div>
+              <p>{iFinished ? (done.length >= total ? "Everyone has voted!" : "You're done. Waiting for the rest of the group.") : "Swipe through the options to cast your votes."}</p>
+              <Button size="lg" onClick={() => nav(iFinished ? `/session/${lobby.id}/result` : `/session/${lobby.id}/vote`)}>
+                {iFinished ? "See results" : "Vote now"} <ArrowRight size={16} />
               </Button>
-            ) : allReady ? (
-              <Button size="lg" onClick={() => nav(`/session/${lobby.id}/vote`)}>
-                Start Voting <ArrowRight size={16} />
-              </Button>
-            ) : (
-              <Button size="lg" variant={youReady ? "primary" : "outline"} onClick={() => toggleReady(lobby.id)} aria-pressed={youReady}>
-                {youReady ? "Ready" : "I'm Ready"}
-              </Button>
-            )}
-            {canStart && allReady && (
-              <button type="button" className="link-inline" onClick={() => toggleReady(lobby.id)}>
-                Not ready yet
-              </button>
-            )}
-            {canStart && !allReady && admin && (
-              <button type="button" className="link-inline" onClick={() => nav(`/session/${lobby.id}/vote`)}>
-                Start voting anyway
-              </button>
-            )}
-          </section>
+              {admin && (
+                <span className="voting-admin">
+                  {!iFinished || done.length < total ? (
+                    <button
+                      type="button"
+                      className="link-inline"
+                      onClick={() => {
+                        revealResults(lobby.id);
+                        nav(`/session/${lobby.id}/result`);
+                      }}
+                    >
+                      Reveal results now
+                    </button>
+                  ) : null}
+                  <button type="button" className="link-inline muted" onClick={() => endVoting(lobby.id)}>
+                    End voting
+                  </button>
+                </span>
+              )}
+            </section>
+          ) : (
+            <section className="card readiness">
+              <span className="eyebrow muted">Group Readiness</span>
+              <div className="ready-count" aria-live="polite">
+                <span>
+                  {readyCount}/{total}
+                </span>
+                <small>READY</small>
+              </div>
+              <p>
+                {!canStart
+                  ? "Add at least 2 options so everyone has something to vote on."
+                  : admin
+                    ? total === 1
+                      ? "It's just you so far. Invite friends, or start voting on your own."
+                      : allReady
+                        ? "Everyone's ready. Start voting when you are."
+                        : `${readyCount} of ${total} ready — start whenever you like.`
+                    : allReady
+                      ? total === 1
+                        ? "It's just you so far. Waiting for the host to start voting."
+                        : "Everyone's ready. Waiting for the host to start voting."
+                      : total === 1
+                        ? "It's just you so far. Invite friends."
+                        : remaining === 1
+                          ? "Almost there! Just waiting for 1 more friend to lock in."
+                          : `Almost there! Just waiting for ${remaining} more friends to lock in.`}
+              </p>
+              {!canStart ? (
+                <Button size="lg" onClick={() => nav(`/lobby/${lobby.id}/customize`)}>
+                  <PlusCircle size={16} /> Add options
+                </Button>
+              ) : admin ? (
+                <>
+                  <Button
+                    size="lg"
+                    onClick={() => {
+                      startVoting(lobby.id);
+                      nav(`/session/${lobby.id}/vote`);
+                    }}
+                  >
+                    Start Voting <ArrowRight size={16} />
+                  </Button>
+                  <button type="button" className="link-inline" onClick={() => toggleReady(lobby.id)}>
+                    {youReady ? "Mark me not ready" : "Mark me ready"}
+                  </button>
+                </>
+              ) : (
+                <Button size="lg" variant={youReady ? "primary" : "outline"} onClick={() => toggleReady(lobby.id)} aria-pressed={youReady}>
+                  {youReady ? "Ready" : "I'm Ready"}
+                </Button>
+              )}
+              {!admin && canStart && (
+                <small className="host-note">Only the host and admins can start voting.</small>
+              )}
+            </section>
+          )}
 
           <section className="card session-details">
             <div className="sd-head">
               <span className="eyebrow muted">Session Details</span>
-              <span className={`pill ${lobby.locked ? "pill-gray" : "pill-yellow"}`}>{lobby.locked ? "LOCKED" : "LIVE"}</span>
+              <span className={`pill ${lobby.locked ? "pill-gray" : "pill-yellow"}`}>{lobby.locked ? "LOCKED" : voting ? "VOTING" : "LIVE"}</span>
             </div>
             <div className="sd-row">
               <span className="sd-icon lav" aria-hidden>
@@ -250,7 +344,7 @@ export function LobbyPage() {
           </div>
           <div className="squad-grid">
             {lobby.members.map((m) => (
-              <MemberCard key={m.id} m={m} ready={lobby.ready.includes(m.id)} avatar={user?.avatar} />
+              <MemberCard key={m.id} m={m} ready={lobby.ready.includes(m.id)} avatar={user?.avatar} youName={user.name} />
             ))}
             {lobby.invites.map((i) => (
               <div key={i.id} className="member-card pending">

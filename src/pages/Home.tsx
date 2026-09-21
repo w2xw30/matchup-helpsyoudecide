@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, Globe, History, MoreHorizontal, Plus, TrendingUp, Zap } from "lucide-react";
+import { ChevronRight, Globe, History, MoreHorizontal, Plus, TrendingUp, X, Zap } from "lucide-react";
 import { templates, type Template } from "../data/mock";
 import { isMember } from "../lib/perms";
 import { useStore } from "../store/useStore";
@@ -62,6 +62,8 @@ export function Home() {
   const lobbyMap = useStore((s) => s.lobbies);
   const mine = useMemo(() => Object.values(lobbyMap).filter(isMember).sort((a, b) => b.createdAt - a.createdAt), [lobbyMap]);
   const resume = mine[0];
+  const introDismissed = useStore((s) => s.introDismissed);
+  const dismissIntro = useStore((s) => s.dismissIntro);
 
   return (
     <div className="home">
@@ -89,6 +91,38 @@ export function Home() {
           </Link>
         )}
       </section>
+
+      {!introDismissed && (
+        <section className="how" aria-labelledby="how-h">
+          <h2 id="how-h">How Matchup works</h2>
+          <div className="how-steps">
+            <div className="how-step">
+              <span className="how-n">1</span>
+              <div>
+                <strong>Create a lobby</strong>
+                <p>Name it and say what you're deciding — dinner, a movie, a game night.</p>
+              </div>
+            </div>
+            <div className="how-step">
+              <span className="how-n">2</span>
+              <div>
+                <strong>Invite your people</strong>
+                <p>Share a link, a 6-digit code or a QR code. No account needed to join.</p>
+              </div>
+            </div>
+            <div className="how-step">
+              <span className="how-n">3</span>
+              <div>
+                <strong>Swipe to a match</strong>
+                <p>Everyone swipes the same options. The group's favourite wins.</p>
+              </div>
+            </div>
+          </div>
+          <button type="button" className="how-x" aria-label="Hide this guide" onClick={dismissIntro}>
+            <X size={16} />
+          </button>
+        </section>
+      )}
 
       <div className="home-grid">
         <section aria-labelledby="tpl-h">

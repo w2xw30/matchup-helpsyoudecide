@@ -4,6 +4,8 @@ import { Lock, Mail, User } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { AuthShell } from "../components/layout/Layout";
 import { Button, TextField } from "../components/ui/ui";
+import { IS_BACKEND } from "../backend/config";
+import { resetPassword, signIn, signUp } from "../backend/auth";
 import { AppleIcon, GoogleIcon, LogoMark } from "../components/ui/brand";
 
 const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -36,26 +38,32 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [busy, setBusy] = useState(false);
 
   if (!user.guest) return <Navigate to={from} replace />;
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next: typeof errors = {};
     if (!emailOk(email)) next.email = "Enter a valid email address.";
     if (password.length < 6) next.password = "Password must be at least 6 characters.";
     setErrors(next);
     if (Object.keys(next).length) return;
-    login(email.trim());
+    setBusy(true);
+    const err = await signIn(email.trim(), password);
+    setBusy(false);
+    if (err) return setErrors({ password: err });
     nav(from, { replace: true });
   };
 
-  const forgot = () => {
+  const forgot = async () => {
     if (!emailOk(email)) {
       setErrors({ email: "Type your email first and we'll send a reset link." });
       return;
     }
     setErrors({});
+    const err = await resetPassword(email.trim());
+    if (err) return setErrors({ email: err });
     toast("Check your mail to reset your password");
   };
 
@@ -90,16 +98,16 @@ export function Login() {
             </button>
           }
         />
-        <Button type="submit" block size="lg">
-          Login
+        <Button type="submit" block size="lg" disabled={busy}>
+          {busy ? "Logging in…" : "Login"}
         </Button>
-        <Social
+        {!IS_BACKEND && <Social
           onPick={(p) => {
             login("alex@example.com", "Alex Rivera");
             toast(`Signed in with ${p}`);
             nav(from, { replace: true });
           }}
-        />
+        />}
         <p className="auth-foot">
           Don't have an account? <Link to="/signup">Create an account</Link>
         </p>
@@ -120,10 +128,11 @@ export function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [busy, setBusy] = useState(false);
 
   if (!user.guest) return <Navigate to="/" replace />;
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next: typeof errors = {};
     if (name.trim().length < 2) next.name = "Tell us what to call you.";
@@ -131,7 +140,14 @@ export function Signup() {
     if (password.length < 6) next.password = "Use at least 6 characters.";
     setErrors(next);
     if (Object.keys(next).length) return;
-    login(email.trim(), name.trim());
+    setBusy(true);
+    const r = await signUp(email.trim(), password, name.trim());
+    setBusy(false);
+    if (r.error) return setErrors({ email: r.error });
+    if (r.notice) {
+      toast(r.notice, "info");
+      return nav("/login");
+    }
     toast(`Welcome to the squad, ${name.trim().split(" ")[0]}!`);
     nav("/", { replace: true });
   };
@@ -145,16 +161,16 @@ export function Signup() {
         <TextField label="Full Name" icon={<User size={18} />} placeholder="Alex Johnson" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
         <TextField label="Email Address" icon={<Mail size={18} />} type="email" placeholder="alex@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
         <TextField label="Password" icon={<Lock size={18} />} toggleable placeholder="••••••••" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} error={errors.password} />
-        <Button type="submit" block size="lg">
-          Sign Up
+        <Button type="submit" block size="lg" disabled={busy}>
+          {busy ? "Creating account…" : "Sign Up"}
         </Button>
-        <Social
+        {!IS_BACKEND && <Social
           onPick={(p) => {
             login("alex@example.com", "Alex Rivera");
             toast(`Signed up with ${p}`);
             nav("/", { replace: true });
           }}
-        />
+        />}
         <p className="auth-foot">
           Already have an account? <Link to="/login">Log in</Link>
         </p>

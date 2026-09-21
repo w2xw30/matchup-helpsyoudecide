@@ -13,6 +13,12 @@ npm run build
 **No login required.** The app opens on Home and everyone starts as a guest (initials avatar, no photo). Logging in / signing up is optional: any valid email + a 6+ character password works in this prototype (`alex@example.com` gives the "Alex Rivera" profile). Password & Security is the only page that needs a real account.
 Demo join codes: `482913` (Friday Night Social) and `731204` (The Weekend Gamers), plus the code of any lobby you create.
 
+## Two modes
+
+- **Local (default):** no setup. Everything runs in the browser; friends and other voters are simulated.
+- **Online:** add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see `.env.example`) and the same app uses a real Supabase backend: guest + email accounts, shared lobbies, live updates, real votes, friends and clans.
+  **Follow [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md)** (about 15 minutes, free). The database is `supabase/schema.sql`.
+
 ## What you can do
 
 - **Create a lobby** (account menu, mobile bottom nav, Home, Groups): title, icon,
@@ -42,7 +48,16 @@ Demo join codes: `482913` (Friday Night Social) and `731204` (The Weekend Gamers
 | `/notifications`, `/settings`, `/settings/security`, `/settings/visibility`, `/support` | Account |
 | `/activity`, `/about`, `/faq`, `/privacy` | Info |
 
-## Prototype-only behaviour (delete when the backend lands)
+## Also included
+
+- **Voting rules:** only the owner/admins can *Start Voting* (enforced in the UI and by database rules). Everyone votes on their own; a fast voter sees a waiting room until the whole group has finished (admins can *Reveal results now*), and other people's votes stay hidden until then.
+- **Results:** ranked list with who voted for what, copy / share / save-as-image, a runoff between the top two, "lock in" a decision (lobbies then move to *Decided*), round history.
+- **Notifications** are generated from real events (someone joined, everyone's ready, a decision, a role change, a friend request).
+- **Options:** paste a list, add a link, reorder (admins), photos via search or upload.
+- **Groups:** search, sort, Active / Decided views.
+- **Phones:** scan a lobby's QR code from the Join page.
+
+## Prototype-only behaviour (local mode only — switched off automatically when the backend is on)
 
 - `src/lib/hooks.ts` — pending invites are auto-accepted after a few seconds.
 - `Groups.tsx` — friend requests are auto-accepted after a few seconds.
@@ -50,7 +65,7 @@ Demo join codes: `482913` (Friday Night Social) and `731204` (The Weekend Gamers
 - `src/lib/deck.ts` — friends' votes are simulated deterministically (`friendLikes`).
 - `src/lib/wiki.ts` — option photo lookup; swap for a server endpoint (Places / TMDB / IGDB / Unsplash).
   Wikipedia thumbnails need attribution before a public launch.
-- Invite links and codes resolve only in the browser that created the lobby, since data lives in `localStorage`.
+- In local mode, invite links and codes resolve only in the browser that created the lobby (data lives in `localStorage`). Online mode has no such limit.
 
 ## Layout
 
@@ -59,4 +74,7 @@ Demo join codes: `482913` (Friday Night Social) and `731204` (The Weekend Gamers
 - `src/components/lobby` — Composer (suggestions/upload), Modals (invite+QR, members, settings), item visuals
 - `src/components/layout` — Navbar, Footer, BottomNav, AppShell
 - `src/lib` — catalog (emoji/kinds), wiki (suggestions), image (upload), perms (roles), deck (voting), url
-- `src/store/useStore.ts` — mock data layer (persist version 3)
+- `src/store/useStore.ts` — app state (persist version 4)
+- `src/backend/` — Supabase client, sync engine, auth, mapping (only active in online mode)
+- `supabase/schema.sql` — database tables, security rules and functions
+- `docs/BACKEND_SETUP.md` — step-by-step backend guide

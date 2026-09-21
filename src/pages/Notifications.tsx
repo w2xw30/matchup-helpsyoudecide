@@ -1,38 +1,56 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BellOff, Check, History, Mail, Users, Utensils } from "lucide-react";
+import { BellOff, Check, History, ListPlus, Mail, ShieldCheck, Trophy, UserPlus, Users, Utensils, Zap } from "lucide-react";
 import { useStore } from "../store/useStore";
-import type { Notif } from "../data/mock";
+import type { Notif, NotifType } from "../data/mock";
+import { timeAgo } from "../lib/time";
+import { isMember } from "../lib/perms";
 import { Avatar, Button, Chip } from "../components/ui/ui";
 
 const FILTERS = [
-  { id: "all", label: "All" },
-  { id: "invite", label: "Invites" },
-  { id: "match", label: "Matches" },
-  { id: "group", label: "Groups" },
-] as const;
+  { id: "all", label: "All", types: null },
+  { id: "invite", label: "Invites", types: ["invite", "friend"] },
+  { id: "match", label: "Matches", types: ["match", "decision"] },
+  { id: "group", label: "Groups", types: ["group", "ready", "role", "item"] },
+] as const satisfies readonly { id: string; label: string; types: readonly NotifType[] | null }[];
+
+const ICON: Partial<Record<NotifType, { icon: ReactNode; tone: "yellow" | "muted" }>> = {
+  match: { icon: <Utensils size={20} />, tone: "yellow" },
+  decision: { icon: <Trophy size={20} />, tone: "yellow" },
+  ready: { icon: <Zap size={20} />, tone: "yellow" },
+  role: { icon: <ShieldCheck size={20} />, tone: "muted" },
+  item: { icon: <ListPlus size={20} />, tone: "muted" },
+  friend: { icon: <UserPlus size={20} />, tone: "muted" },
+  stats: { icon: <History size={20} />, tone: "muted" },
+  group: { icon: <Users size={20} />, tone: "muted" },
+};
 
 function Item({ n }: { n: Notif }) {
   const nav = useNavigate();
   const markRead = useStore((s) => s.markRead);
+  const lobby = useStore((s) => (n.lobbyId ? s.lobbies[n.lobbyId] : undefined));
+  const member = isMember(lobby);
   const go = (to: string) => {
     markRead(n.id);
     nav(to);
   };
+  const lobbyLink = n.lobbyId ? (member ? `/lobby/${n.lobbyId}` : `/join/${n.lobbyId}`) : (n.to ?? "/");
+
+  const badge = n.type === "invite" ? <Mail size={9} strokeWidth={3} /> : n.type === "friend" ? <UserPlus size={9} strokeWidth={3} /> : <Users size={9} strokeWidth={3} />;
   const lead =
-    n.type === "match" ? (
-      <span className="n-icon yellow">
-        <Utensils size={20} />
-        <i className="n-badge"><Check size={9} strokeWidth={4} /></i>
-      </span>
-    ) : n.type === "stats" ? (
-      <span className="n-icon muted">
-        <History size={20} />
+    n.avatar || n.who ? (
+      <span className="n-avatar">
+        <Avatar src={n.avatar} name={n.who ?? n.highlight ?? "Group"} size={44} />
+        <i className="n-badge">{badge}</i>
       </span>
     ) : (
-      <span className="n-avatar">
-        <Avatar src={n.avatar} name={n.who ?? "Group"} size={44} />
-        <i className="n-badge">{n.type === "invite" ? <Mail size={9} strokeWidth={3} /> : <Users size={9} strokeWidth={3} />}</i>
+      <span className={`n-icon ${ICON[n.type]?.tone ?? "muted"}`}>
+        {ICON[n.type]?.icon}
+        {(n.type === "match" || n.type === "decision") && (
+          <i className="n-badge">
+            <Check size={9} strokeWidth={4} />
+          </i>
+        )}
       </span>
     );
 
@@ -46,29 +64,49 @@ function Item({ n }: { n: Notif }) {
           {n.highlight && <span className="accent"> {n.highlight}</span>}
         </p>
         <p className={`n-text ${n.quote ? "quote" : ""}`}>{n.body}</p>
-        {!n.read && n.type === "invite" && (
+        {!n.read && (
           <div className="n-actions">
-            <Button size="sm" variant="coral" onClick={() => go(`/join/${n.lobbyId}`)}>Join</Button>
-            <Button size="sm" variant="soft" onClick={() => go(`/lobby/${n.lobbyId}`)}>View Details</Button>
-          </div>
-        )}
-        {!n.read && n.type === "match" && (
-          <div className="n-actions">
-            <Button size="sm" variant="coral" onClick={() => go(`/session/${n.lobbyId}/result`)}>View Match</Button>
-          </div>
-        )}
-        {!n.read && n.type === "group" && (
-          <div className="n-actions">
-            <Button size="sm" variant="soft" onClick={() => go(`/lobby/${n.lobbyId}`)}>Open Chat</Button>
+            {n.type === "invite" && (
+              <>
+                <Button size="sm" variant="coral" onClick={() => go(`/join/${n.lobbyId}`)}>
+                  Join
+                </Button>
+                <Button size="sm" variant="soft" onClick={() => go(lobbyLink)}>
+                  View Details
+                </Button>
+              </>
+            )}
+            {(n.type === "match" || n.type === "decision") && n.lobbyId && (
+              <Button size="sm" variant="coral" onClick={() => go(`/session/${n.lobbyId}/result`)}>
+                View Match
+              </Button>
+            )}
+            {n.type === "ready" && (
+              <Button size="sm" variant="coral" onClick={() => go(lobbyLink)}>
+                Start Voting
+              </Button>
+            )}
+            {(n.type === "group" || n.type === "role" || n.type === "item") && (
+              <Button size="sm" variant="soft" onClick={() => go(lobbyLink)}>
+                Open Lobby
+              </Button>
+            )}
+            {n.type === "friend" && (
+              <Button size="sm" variant="soft" onClick={() => go(n.to ?? "/groups?tab=friends")}>
+                View
+              </Button>
+            )}
           </div>
         )}
         {n.type === "stats" && (
-          <Link to="/activity" className="n-link" onClick={() => markRead(n.id)}>
+          <Link to={n.to ?? "/activity"} className="n-link" onClick={() => markRead(n.id)}>
             View stats
           </Link>
         )}
       </div>
-      <time className="n-time">{n.time}</time>
+      <time className="n-time" dateTime={new Date(n.at).toISOString()}>
+        {timeAgo(n.at)}
+      </time>
     </article>
   );
 }
@@ -78,7 +116,8 @@ export function Notifications() {
   const markAll = useStore((s) => s.markAllRead);
   const toast = useStore((s) => s.toast);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
-  const list = notifs.filter((n) => filter === "all" || n.type === filter);
+  const types = FILTERS.find((f) => f.id === filter)?.types as readonly NotifType[] | null | undefined;
+  const list = notifs.filter((n) => !types || types.includes(n.type));
   const unread = notifs.filter((n) => !n.read).length;
 
   return (
@@ -114,7 +153,7 @@ export function Notifications() {
         {list.length === 0 && (
           <div className="empty-state">
             <BellOff size={26} />
-            <p>Nothing here yet.</p>
+            <p>{notifs.length === 0 ? "Nothing yet — activity from your lobbies and friends will show up here." : "Nothing in this filter."}</p>
           </div>
         )}
       </div>

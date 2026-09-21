@@ -39,6 +39,10 @@ export interface LobbyItem {
   price?: string;
   rating?: string;
   distance?: string;
+  /** optional map / website link */
+  url?: string;
+  /** manual ordering; falls back to addedAt */
+  pos?: number;
   addedAt: number;
 }
 export interface ChatMsg {
@@ -66,6 +70,55 @@ export interface Lobby {
   locked: boolean;
   chat: ChatMsg[];
   createdAt: number;
+  /** voting round: 1, then 2… when a runoff is started */
+  round: number;
+  /** item ids in play during a runoff (null = everything) */
+  runoff: string[] | null;
+  /** set once the group locks in a pick */
+  decision: Decision | null;
+  history: HistoryEntry[];
+  /** planning = building the list; voting = only admins can switch this on */
+  phase: "planning" | "voting";
+  /** an admin closed voting early and revealed the results for this round */
+  revealed: boolean;
+  /** other members' votes for the current round (backend only — locally they are simulated) */
+  votesBy?: Record<string, Record<string, "like" | "nope">>;
+  /** how many options each member has answered this round, and how many are in play (backend only) */
+  progress?: Record<string, number>;
+  deckSize?: number;
+}
+export interface Decision {
+  itemId: string;
+  title: string;
+  emoji: string;
+  image?: string;
+  likes: number;
+  voters: number;
+  matched: boolean;
+  at: number;
+  byName: string;
+}
+export interface HistoryEntry {
+  round: number;
+  title: string;
+  emoji: string;
+  likes: number;
+  voters: number;
+  kind: "runoff" | "decided";
+  at: number;
+}
+
+/** Fills in fields older saved lobbies don't have. */
+export function normalizeLobby(l: Lobby): Lobby {
+  return {
+    ...l,
+    round: l.round ?? 1,
+    runoff: l.runoff ?? null,
+    decision: l.decision ?? null,
+    history: l.history ?? [],
+    phase: l.phase ?? "planning",
+    revealed: l.revealed ?? false,
+  };
 }
 
 export interface Friend {
@@ -73,7 +126,8 @@ export interface Friend {
   name: string;
   handle: string;
   avatar?: string;
-  status: "friend" | "pending";
+  /** friend = accepted, pending = I asked, incoming = they asked me */
+  status: "friend" | "pending" | "incoming";
   addedAt: number;
 }
 export interface Clan {
@@ -152,6 +206,12 @@ export const defaultLobbies = (): Record<string, Lobby> => ({
     locked: false,
     chat: seedChat(),
     createdAt: T0,
+    round: 1,
+    runoff: null,
+    decision: null,
+    history: [],
+    phase: "planning",
+    revealed: false,
   },
   [GAMERS_LOBBY_ID]: {
     id: GAMERS_LOBBY_ID,
@@ -177,6 +237,12 @@ export const defaultLobbies = (): Record<string, Lobby> => ({
     locked: false,
     chat: [],
     createdAt: T0 - 86_400_000 * 2,
+    round: 1,
+    runoff: null,
+    decision: null,
+    history: [],
+    phase: "planning",
+    revealed: false,
   },
 });
 
@@ -219,34 +285,37 @@ export const quickTemplates: { id: LobbyKind; label: string; sub: string; kind: 
   { id: "game", label: "Games", sub: "Board, PC, Retro...", kind: "game", items: ["Codenames", "Overcooked", "Uno"] },
 ];
 
+export type NotifType = "invite" | "match" | "group" | "stats" | "ready" | "role" | "item" | "friend" | "decision";
 export interface Notif {
   id: string;
-  type: "invite" | "match" | "group" | "stats";
+  type: NotifType;
   who?: string;
   avatar?: string;
   title: string;
   highlight?: string;
   body: string;
   quote?: boolean;
-  time: string;
+  /** epoch ms */
+  at: number;
   read: boolean;
-  lobbyId: string;
+  lobbyId?: string;
+  /** where "Open" goes when there is no lobby */
+  to?: string;
 }
-export const seedNotifs = (): Notif[] => [
-  { id: "n1", type: "invite", who: "Priya", avatar: av(5), title: "invited you to a new session", body: "\"Hey! Thought this would be perfect for our group.\"", quote: true, time: "2M AGO", read: false, lobbyId: DEFAULT_LOBBY_ID },
-  { id: "n2", type: "match", title: "Match found for", highlight: "Friday Night Dinner!", body: "4 people with similar interests are ready to go.", time: "45M AGO", read: false, lobbyId: DEFAULT_LOBBY_ID },
-  { id: "n3", type: "group", avatar: av(4), title: "New group member joined", highlight: "'The Weekend Gamers'", body: "Marcus and 2 others just hopped in. Say hello!", time: "2H AGO", read: false, lobbyId: GAMERS_LOBBY_ID },
-  { id: "n4", type: "stats", title: "Your weekly stats are ready", body: "See how many matches you made last week.", time: "YESTERDAY", read: true, lobbyId: DEFAULT_LOBBY_ID },
-];
-
-export const recents = [
-  { id: "r1", title: "Late Night Game", meta: "YESTERDAY • 12 PARTICIPANTS", avatars: [av(2), av(3)], lobbyId: DEFAULT_LOBBY_ID },
-  { id: "r2", title: "Lunch Spot", meta: "3 DAYS AGO • 8 PARTICIPANTS", avatars: [av(5)], initials: "SJ", lobbyId: GAMERS_LOBBY_ID },
-];
+export const seedNotifs = (): Notif[] => {
+  const now = Date.now();
+  const min = 60_000;
+  return [
+    { id: "n1", type: "invite", who: "Priya", avatar: av(5), title: "invited you to a new session", body: "\"Hey! Thought this would be perfect for our group.\"", quote: true, at: now - 2 * min, read: false, lobbyId: DEFAULT_LOBBY_ID },
+    { id: "n2", type: "match", title: "Match found for", highlight: "Friday Night Dinner!", body: "4 people with similar interests are ready to go.", at: now - 45 * min, read: false, lobbyId: DEFAULT_LOBBY_ID },
+    { id: "n3", type: "group", avatar: av(4), title: "New group member joined", highlight: "'The Weekend Gamers'", body: "Marcus and 2 others just hopped in. Say hello!", at: now - 120 * min, read: false, lobbyId: GAMERS_LOBBY_ID },
+    { id: "n4", type: "stats", title: "Your weekly stats are ready", body: "See how many matches you made last week.", at: now - 26 * 60 * min, read: true, lobbyId: DEFAULT_LOBBY_ID, to: "/activity" },
+  ];
+};
 
 export const faqs = [
   { q: "What is Matchup?", a: "Matchup is a real-time group decision app. Everyone in a lobby swipes on the same options, and the group's most-loved pick wins." },
-  { q: "How do I create a lobby?", a: "Tap “New lobby” in the top bar, give it a title, choose what you're deciding on, then invite your friends with a link, code or QR." },
+  { q: "How do I create a lobby?", a: "Use “New lobby” on Home or in Groups, give it a title, choose what you're deciding on, then invite your friends with a link, code or QR." },
   { q: "How do I invite friends?", a: "Open your lobby and choose Invite. You can copy the link, share the 6-digit code, show the QR code, or invite people by name or email." },
   { q: "What can lobby admins do?", a: "Admins can rename the lobby, change its rules, remove options, remove members, and promote other members to admin. The owner can also transfer ownership." },
   { q: "How do options get pictures?", a: "As you type an option we suggest matches with photos. You can also upload your own photo, and if nothing fits we use a category emoji." },

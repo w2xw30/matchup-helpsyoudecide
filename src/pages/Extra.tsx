@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown, Globe, Lock, MonitorSmartphone, Smartphone, TrendingUp, Users, Zap } from "lucide-react";
 import { isMember } from "../lib/perms";
 import { useStore } from "../store/useStore";
+import { useBackend } from "../backend/status";
+import { changePassword } from "../backend/auth";
 import { Button, Chip, ConfirmCard, LinkButton, TextField, Toggle } from "./../components/ui/ui";
 import { faqs } from "../data/mock";
 
@@ -111,16 +113,23 @@ export function Security() {
   const [conf, setConf] = useState("");
   const [err, setErr] = useState<Record<string, string>>({});
   const [ok, setOk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // after a reset-email login the current password isn't needed
+  const recovery = useBackend((s) => s.recovery);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     const x: Record<string, string> = {};
-    if (cur.length < 6) x.cur = "Enter your current password.";
+    if (!recovery && cur.length < 6) x.cur = "Enter your current password.";
     if (next.length < 8) x.next = "Use at least 8 characters.";
     else if (next === cur) x.next = "Choose a password you haven't used.";
     if (conf !== next) x.conf = "Passwords don't match.";
     setErr(x);
     if (Object.keys(x).length) return;
+    setBusy(true);
+    const problem = await changePassword(recovery ? null : cur, next);
+    setBusy(false);
+    if (problem) return setErr({ cur: problem });
     setCur("");
     setNext("");
     setConf("");
@@ -132,10 +141,11 @@ export function Security() {
       <SubHead title="Password & Security" sub="Keep your account safe with a strong password and two-factor sign-in." />
       <form className="card s-card stack" onSubmit={submit} noValidate>
         <div className="s-title"><span><Lock size={16} className="accent" /> Change password</span></div>
-        <TextField label="Current password" toggleable value={cur} onChange={(e) => setCur(e.target.value)} error={err.cur} autoComplete="current-password" />
+        {!recovery && <TextField label="Current password" toggleable value={cur} onChange={(e) => setCur(e.target.value)} error={err.cur} autoComplete="current-password" />}
+        {recovery && <p className="sheet-note">You signed in from a reset link — choose a new password below.</p>}
         <TextField label="New password" toggleable value={next} onChange={(e) => setNext(e.target.value)} error={err.next} autoComplete="new-password" />
         <TextField label="Confirm new password" toggleable value={conf} onChange={(e) => setConf(e.target.value)} error={err.conf} autoComplete="new-password" />
-        <div><Button type="submit" pill>Update password</Button></div>
+        <div><Button type="submit" pill disabled={busy}>{busy ? "Saving…" : "Update password"}</Button></div>
       </form>
 
       <section className="card s-card">

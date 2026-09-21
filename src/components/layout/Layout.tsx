@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import { Bell, Compass, Globe, LogIn, LogOut, Mail, Moon, Plus, Settings, Share2, Sun, UserRound, Users } from "lucide-react";
 import { useStore } from "../../store/useStore";
 import { useUI } from "../../store/ui";
+import { signOutUser } from "../../backend/auth";
 import { Avatar, ConfirmCard, ToastHost } from "../ui/ui";
 
 const homeish = (p: string) => p === "/" || p.startsWith("/join") && !/^\/join\/.+/.test(p) || p.startsWith("/activity");
@@ -178,7 +179,6 @@ export function BottomNav() {
 export function LogoutHost() {
   const open = useUI((s) => s.logoutOpen);
   const setOpen = useUI((s) => s.setLogoutOpen);
-  const logout = useStore((s) => s.logout);
   const nav = useNavigate();
   return (
     <ConfirmCard
@@ -189,8 +189,7 @@ export function LogoutHost() {
       confirmLabel="Logout"
       onConfirm={() => {
         setOpen(false);
-        logout();
-        nav("/");
+        void signOutUser().then(() => nav("/"));
       }}
     />
   );

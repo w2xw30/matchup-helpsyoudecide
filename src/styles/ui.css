@@ -115,15 +115,18 @@
 .divider-plain::before, .divider-plain::after { background: var(--pink-line); }
 
 /* ---------- Toast ---------- */
-.toast-host { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - 32px); }
+/* Quiet by design: small, neutral, one at a time. Colour only marks a problem. */
+.toast-host { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; align-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - 32px); }
 .toast {
-  display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px; border-radius: var(--r-pill);
-  background: var(--coral); color: #fff; font-size: 14px; font-weight: 500; box-shadow: 0 12px 28px -8px rgba(255, 95, 107, 0.55);
-  pointer-events: auto; cursor: pointer; animation: pop-in 0.25s ease;
+  display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px 10px 12px; border-radius: 12px;
+  background: #23202e; color: #f6f4fa; font-size: 13px; font-weight: 400; line-height: 1.3;
+  box-shadow: 0 8px 24px -8px rgba(20, 15, 40, 0.45); pointer-events: auto; cursor: pointer; animation: pop-in 0.2s ease;
 }
-.toast-info { background: var(--indigo); box-shadow: 0 12px 28px -8px rgba(45, 58, 128, 0.55); }
-.toast-warn { background: #8a5a12; }
-.toast-icon { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 50%; background: rgba(255, 255, 255, 0.25); }
+[data-theme="dark"] .toast { background: #f1eee8; color: #17150f; }
+.toast-icon { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 50%; background: #35c58a; color: #06281a; flex: none; }
+.toast-info .toast-icon { background: #8a93d6; color: #14183a; }
+.toast-warn .toast-icon { background: #f2b84b; color: #3a2704; }
+.toast-icon svg { width: 11px; height: 11px; }
 
 /* ---------- Modal ---------- */
 .modal-backdrop { position: fixed; inset: 0; z-index: 150; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--overlay); backdrop-filter: blur(3px); animation: fade-in 0.2s ease; }

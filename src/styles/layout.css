@@ -88,7 +88,7 @@
   .bottom-nav a.active { color: var(--coral); }
   .bottom-nav a.active .bn-icon { background: var(--pink-tint); }
   [data-theme="dark"] .bottom-nav a.active .bn-icon { background: #3a1f23; }
-  .toast-host { bottom: 92px; }
+  .toast-host { bottom: 96px; }
   .auth-card { padding: 32px 20px 28px; }
   .auth-card h1 { font-size: 34px; }
 }

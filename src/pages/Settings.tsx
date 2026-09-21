@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Camera, ChevronRight, Eye, Lock, LogIn, LogOut, Shield, SlidersHorizontal, Trash2, User } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { useUI } from "../store/ui";
+import { fileToDataUrl } from "../lib/image";
+import { deleteAccountEverywhere } from "../backend/auth";
 import { Avatar, Button, ConfirmCard, LinkButton, TextField, Toggle } from "../components/ui/ui";
 
 export function Settings() {
@@ -12,7 +14,6 @@ export function Settings() {
   const updateProfile = useStore((s) => s.updateProfile);
   const setSetting = useStore((s) => s.setSetting);
   const setTheme = useStore((s) => s.setTheme);
-  const deleteAccount = useStore((s) => s.deleteAccount);
   const toast = useStore((s) => s.toast);
   const setLogoutOpen = useUI((s) => s.setLogoutOpen);
   const nav = useNavigate();
@@ -30,13 +31,14 @@ export function Settings() {
     toast("Changes Saved");
   };
 
-  const pickFile = (f?: File) => {
+  const pickFile = async (f?: File) => {
     if (!f) return;
-    if (!f.type.startsWith("image/")) return toast("Please choose an image file", "warn");
-    if (f.size > 2_000_000) return toast("Image must be under 2 MB", "warn");
-    const r = new FileReader();
-    r.onload = () => setAvatar(String(r.result));
-    r.readAsDataURL(f);
+    try {
+      // small square-ish JPEG: keeps profiles light in storage and on the wire
+      setAvatar(await fileToDataUrl(f, 320, 0.82));
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Couldn't use that image", "warn");
+    }
   };
 
   return (
@@ -84,6 +86,11 @@ export function Settings() {
               </div>
               <div className="profile-fields">
                 <TextField label="DISPLAY NAME" value={name} onChange={(e) => setName(e.target.value)} error={nameError} maxLength={40} />
+                {user.handle && (
+                  <p className="handle-note">
+                    Your username is <strong>@{user.handle}</strong>. Friends can add you with it or with your email.
+                  </p>
+                )}
                 <div className="field">
                   <div className="field-head">
                     <label htmlFor="bio">BIO</label>
@@ -148,8 +155,7 @@ export function Settings() {
         confirmLabel={user.guest ? "Reset" : "Delete"}
         onConfirm={() => {
           setDelOpen(false);
-          deleteAccount();
-          nav("/");
+          void deleteAccountEverywhere().then(() => nav("/"));
         }}
       />
     </div>

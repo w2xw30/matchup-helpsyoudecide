@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { Lobby } from "../data/mock";
 import { useStore } from "../store/useStore";
+import { IS_BACKEND } from "../backend/config";
 
 /**
  * Prototype behaviour: pending invites are "accepted" a few seconds after they're sent so the
@@ -13,7 +14,7 @@ export function useSimulatedJoins(lobby: Lobby | undefined) {
   const id = lobby?.id;
   const invites = lobby?.invites;
   useEffect(() => {
-    if (!id || !invites?.length) return;
+    if (IS_BACKEND || !id || !invites?.length) return;
     const timers = invites.map((inv) =>
       setTimeout(() => {
         const name = accept(id, inv.id);

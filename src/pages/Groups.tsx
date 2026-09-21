@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Check, Plus, Trash2, UserPlus, Users, X, Zap } from "lucide-react";
+import { Check, Plus, Search, Trash2, UserPlus, Users, X, Zap } from "lucide-react";
 import type { Clan } from "../data/mock";
 import { EMOJIS } from "../lib/emoji";
 import { isMember, myRole, roleLabel } from "../lib/perms";
 import { useStore } from "../store/useStore";
+import { IS_BACKEND } from "../backend/config";
 import { Avatar, AvatarStack, Button, Chip, ConfirmCard, LinkButton, Modal } from "../components/ui/ui";
 
 const TABS = [
@@ -22,6 +23,23 @@ export function Groups() {
   const clans = useStore((s) => s.clans);
   const lobbies = useMemo(() => Object.values(lobbyMap).filter((l) => isMember(l)), [lobbyMap]);
   const [clanModal, setClanModal] = useState<Clan | "new" | null>(null);
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<"recent" | "name" | "options" | "ready">("recent");
+  const [view, setView] = useState<"active" | "decided">("active");
+  const query = q.trim().toLowerCase();
+
+  const decidedCount = lobbies.filter((l) => l.decision).length;
+  const shownLobbies = useMemo(() => {
+    const match = (l: (typeof lobbies)[number]) =>
+      !query ||
+      [l.name, l.description, ...l.members.map((m) => m.fullName ?? m.name), ...l.items.map((i) => i.title)].some((t) => t.toLowerCase().includes(query));
+    const readyShare = (l: (typeof lobbies)[number]) => l.ready.length / Math.max(1, l.members.length);
+    return lobbies
+      .filter((l) => (view === "decided" ? !!l.decision : !l.decision) && match(l))
+      .sort((a, b) =>
+        sort === "name" ? a.name.localeCompare(b.name) : sort === "options" ? b.items.length - a.items.length : sort === "ready" ? readyShare(b) - readyShare(a) : b.createdAt - a.createdAt,
+      );
+  }, [lobbies, query, sort, view]);
 
   const counts: Record<Tab, number> = { lobbies: lobbies.length, friends: friends.filter((f) => f.status === "friend").length, clans: clans.length };
 
@@ -59,9 +77,40 @@ export function Groups() {
         ))}
       </div>
 
-      {tab === "lobbies" && <LobbiesTab lobbies={lobbies} />}
-      {tab === "friends" && <FriendsTab />}
-      {tab === "clans" && <ClansTab onManage={setClanModal} onNew={() => setClanModal("new")} />}
+      <div className="g-tools">
+        <label className="g-search">
+          <Search size={16} aria-hidden />
+          <input
+            type="search"
+            placeholder={tab === "lobbies" ? "Search lobbies, options or people" : tab === "friends" ? "Search friends" : "Search clans"}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Search"
+          />
+        </label>
+        {tab === "lobbies" && (
+          <>
+            <div className="seg sm" role="radiogroup" aria-label="Show lobbies">
+              <button type="button" role="radio" aria-checked={view === "active"} className={view === "active" ? "on" : ""} onClick={() => setView("active")}>
+                Active
+              </button>
+              <button type="button" role="radio" aria-checked={view === "decided"} className={view === "decided" ? "on" : ""} onClick={() => setView("decided")}>
+                Decided{decidedCount ? ` (${decidedCount})` : ""}
+              </button>
+            </div>
+            <select className="g-select" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort lobbies">
+              <option value="recent">Newest first</option>
+              <option value="name">Name A–Z</option>
+              <option value="options">Most options</option>
+              <option value="ready">Most ready</option>
+            </select>
+          </>
+        )}
+      </div>
+
+      {tab === "lobbies" && <LobbiesTab lobbies={shownLobbies} view={view} query={query} />}
+      {tab === "friends" && <FriendsTab query={query} />}
+      {tab === "clans" && <ClansTab query={query} onManage={setClanModal} onNew={() => setClanModal("new")} />}
 
       <ClanModal target={clanModal} onClose={() => setClanModal(null)} />
     </div>
@@ -69,8 +118,16 @@ export function Groups() {
 }
 
 /* ---------------- Lobbies ---------------- */
-function LobbiesTab({ lobbies }: { lobbies: ReturnType<typeof useStore.getState>["lobbies"][string][] }) {
-  const sorted = [...lobbies].sort((a, b) => b.createdAt - a.createdAt);
+function LobbiesTab({ lobbies, view, query }: { lobbies: ReturnType<typeof useStore.getState>["lobbies"][string][]; view: "active" | "decided"; query: string }) {
+  const sorted = lobbies;
+  if (sorted.length === 0 && (query || view === "decided")) {
+    return (
+      <div className="empty-state">
+        <Users size={28} />
+        <p>{query ? `No lobbies match “${query}”.` : "Nothing decided yet. Lock in a pick from a result page and it lands here."}</p>
+      </div>
+    );
+  }
   if (sorted.length === 0) {
     return (
       <div className="empty-state">
@@ -94,8 +151,8 @@ function LobbiesTab({ lobbies }: { lobbies: ReturnType<typeof useStore.getState>
                 {l.emoji}
               </span>
               <span className="tpl-badges">
-                <span className={`pill ${ready >= l.members.length ? "pill-yellow" : "pill-gray"}`}>
-                  {ready >= l.members.length ? "ALL READY" : `${ready}/${l.members.length} READY`}
+                <span className={`pill ${l.decision || l.phase === "voting" || ready >= l.members.length ? "pill-yellow" : "pill-gray"}`}>
+                  {l.decision ? "DECIDED" : l.phase === "voting" ? "VOTING" : ready >= l.members.length ? "ALL READY" : `${ready}/${l.members.length} READY`}
                 </span>
                 <span className={`role-badge role-${role}`}>{roleLabel(role)}</span>
               </span>
@@ -104,6 +161,7 @@ function LobbiesTab({ lobbies }: { lobbies: ReturnType<typeof useStore.getState>
             <p>
               {l.items.length} options · {l.members.length} {l.members.length === 1 ? "member" : "members"}
             </p>
+            {l.decision && <p className="decision-note">Decided: {l.decision.title}</p>}
             <AvatarStack avatars={l.members.filter((m) => m.avatar).slice(0, 4).map((m) => m.avatar!)} extra={`${l.members.length}`} size={28} />
             <div className="group-actions">
               <Link to={`/lobby/${l.id}`} className="tpl-create">
@@ -124,11 +182,12 @@ function LobbiesTab({ lobbies }: { lobbies: ReturnType<typeof useStore.getState>
 }
 
 /* ---------------- Friends ---------------- */
-function FriendsTab() {
+function FriendsTab({ query }: { query: string }) {
   const friends = useStore((s) => s.friends);
   const add = useStore((s) => s.addFriend);
   const accept = useStore((s) => s.acceptFriend);
   const remove = useStore((s) => s.removeFriend);
+  const respond = useStore((s) => s.respondFriend);
   const toast = useStore((s) => s.toast);
   const [who, setWho] = useState("");
   const [error, setError] = useState("");
@@ -137,7 +196,7 @@ function FriendsTab() {
   // Prototype: requests are accepted a few seconds later. Remove once the server sends acceptances.
   const pendingKey = friends.filter((f) => f.status === "pending").map((f) => f.id).join(",");
   useEffect(() => {
-    if (!pendingKey) return;
+    if (IS_BACKEND || !pendingKey) return;
     const timers = pendingKey.split(",").map((id) =>
       setTimeout(() => {
         const f = useStore.getState().friends.find((x) => x.id === id);
@@ -164,7 +223,9 @@ function FriendsTab() {
     }
   };
 
-  const sorted = [...friends].sort((a, b) => Number(a.status === "pending") - Number(b.status === "pending") || a.name.localeCompare(b.name));
+  const matches = (f: (typeof friends)[number]) => !query || f.name.toLowerCase().includes(query) || f.handle.toLowerCase().includes(query);
+  const incoming = friends.filter((f) => f.status === "incoming" && matches(f));
+  const sorted = friends.filter((f) => f.status !== "incoming" && matches(f)).sort((a, b) => Number(a.status === "pending") - Number(b.status === "pending") || a.name.localeCompare(b.name));
 
   return (
     <div className="friends">
@@ -185,10 +246,33 @@ function FriendsTab() {
         </p>
       )}
 
+      {incoming.length > 0 && (
+        <div className="friend-reqs">
+          <h4>Friend requests ({incoming.length})</h4>
+          <ul className="friend-list card">
+            {incoming.map((f) => (
+              <li key={f.id}>
+                <Avatar src={f.avatar} name={f.name} size={42} />
+                <span className="row-main">
+                  <strong>{f.name}</strong>
+                  <small>wants to be friends</small>
+                </span>
+                <Button size="sm" pill onClick={() => (respond(f.id, true), toast(`You and ${f.name} are now friends`))}>
+                  Accept
+                </Button>
+                <Button size="sm" pill variant="soft" onClick={() => respond(f.id, false)}>
+                  Decline
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <div className="empty-state">
           <Users size={28} />
-          <p>No friends yet. Add someone above and they'll show up here.</p>
+          <p>{query ? `No friends match “${query}”.` : "No friends yet. Add someone above and they'll show up here."}</p>
         </div>
       ) : (
         <ul className="friend-list card">
@@ -223,11 +307,20 @@ function FriendsTab() {
 }
 
 /* ---------------- Clans ---------------- */
-function ClansTab({ onManage, onNew }: { onManage: (c: Clan) => void; onNew: () => void }) {
-  const clans = useStore((s) => s.clans);
+function ClansTab({ query, onManage, onNew }: { query: string; onManage: (c: Clan) => void; onNew: () => void }) {
+  const allClans = useStore((s) => s.clans);
+  const clans = query ? allClans.filter((c) => c.name.toLowerCase().includes(query) || c.description.toLowerCase().includes(query)) : allClans;
   const friends = useStore((s) => s.friends);
   const nav = useNavigate();
 
+  if (clans.length === 0 && query) {
+    return (
+      <div className="empty-state">
+        <Users size={28} />
+        <p>No clans match “{query}”.</p>
+      </div>
+    );
+  }
   if (clans.length === 0) {
     return (
       <div className="empty-state">

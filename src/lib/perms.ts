@@ -7,6 +7,7 @@ export const isAdmin = (l?: Lobby) => {
   return r === "owner" || r === "admin";
 };
 export const isOwner = (l?: Lobby) => myRole(l) === "owner";
-export const canAddItems = (l?: Lobby) => !!l && isMember(l) && !l.locked && (isAdmin(l) || l.allowFriends);
-export const canEditItem = (l: Lobby | undefined, item: LobbyItem) => !!l && !l.locked && (isAdmin(l) || item.byId === "you");
+/** Options can't change while voting is open, so everyone votes on the same deck. */
+export const canAddItems = (l?: Lobby) => !!l && isMember(l) && !l.locked && l.phase !== "voting" && (isAdmin(l) || l.allowFriends);
+export const canEditItem = (l: Lobby | undefined, item: LobbyItem) => !!l && !l.locked && l.phase !== "voting" && (isAdmin(l) || item.byId === "you");
 export const roleLabel = (r: Role) => (r === "owner" ? "Owner" : r === "admin" ? "Admin" : "Member");

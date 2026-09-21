@@ -6,6 +6,7 @@ import "./styles/ui.css";
 import "./styles/layout.css";
 import "./styles/pages.css";
 import "./styles/lobby.css";
+import "./styles/features.css";
 import App from "./App";
 
 createRoot(document.getElementById("root")!).render(

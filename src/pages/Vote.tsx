@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Check, Info, PartyPopper, PlusCircle, Star, Undo2, X } from "lucide-react";
+import { Check, ExternalLink, Info, PartyPopper, PlusCircle, Star, Undo2, X } from "lucide-react";
 import { av, type LobbyItem } from "../data/mock";
 import { KIND_META } from "../lib/catalog";
-import { buildDeck, computeResult } from "../lib/deck";
-import { isMember } from "../lib/perms";
+import { IS_BACKEND } from "../backend/config";
+import { buildDeck, doneMembers, voteKey } from "../lib/deck";
+import { isAdmin, isMember } from "../lib/perms";
 import { useStore } from "../store/useStore";
 import { AvatarStack, Button, LinkButton, Modal } from "../components/ui/ui";
 import { ItemArt, ItemThumb } from "../components/lobby/visual";
@@ -39,6 +40,11 @@ export function CardFace({ item, stamp }: { item: LobbyItem; stamp?: "like" | "n
         <div className="tags">
           <span className="tag">{meta.label.toUpperCase()}</span>
           <span className="tag">BY {byline.toUpperCase()}</span>
+          {item.url && (
+            <a className="tag tag-link" href={item.url} target="_blank" rel="noopener noreferrer" onPointerDown={(e) => e.stopPropagation()}>
+              OPEN LINK <ExternalLink size={11} />
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -51,10 +57,12 @@ export function Vote() {
   const { id = "" } = useParams();
   const nav = useNavigate();
   const lobby = useStore((s) => s.lobbies[id]);
-  const vote = useStore((s) => s.votes[id]);
+  const key = lobby ? voteKey(lobby) : id;
+  const vote = useStore((s) => s.votes[key]);
   const castVote = useStore((s) => s.castVote);
   const undoVote = useStore((s) => s.undoVote);
   const resetVotes = useStore((s) => s.resetVotes);
+  const startVoting = useStore((s) => s.startVoting);
 
   const deck = useMemo(() => buildDeck(lobby), [lobby]);
   const answers = vote?.answers;
@@ -80,13 +88,13 @@ export function Vote() {
       setDragging(false);
       setExit(choice);
       setTimeout(() => {
-        castVote(id, card.id, choice);
+        castVote(key, card.id, choice);
         setExit(null);
         setDx(0);
         busy.current = false;
       }, 260);
     },
-    [card, castVote, id],
+    [card, castVote, key],
   );
 
   useEffect(() => {
@@ -96,13 +104,49 @@ export function Vote() {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
       if (e.key === "ArrowRight") commit("like");
       else if (e.key === "ArrowLeft") commit("nope");
-      else if ((e.key === "z" || e.key === "Z") && !busy.current) undoVote(id);
+      else if ((e.key === "z" || e.key === "Z") && !busy.current) undoVote(key);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [commit, undoVote, id, info, celebrate]);
+  }, [commit, undoVote, key, info, celebrate]);
 
   if (!lobby || !isMember(lobby)) return <Navigate to="/groups" replace />;
+
+  if (lobby.decision) return <Navigate to={`/session/${id}/result`} replace />;
+
+  if (lobby.phase !== "voting") {
+    const admin = isAdmin(lobby);
+    return (
+      <div className="vote-empty">
+        <span className="emoji-big lg" aria-hidden>
+          {lobby.emoji}
+        </span>
+        <h1>Voting hasn't started</h1>
+        <p>
+          {admin
+            ? deck.length < 2
+              ? `Add at least two options to “${lobby.name}”, then start voting.`
+              : "When everyone's ready, start voting so the whole group swipes at the same time."
+            : "The host will open voting soon — you'll get a notification. Only the host and admins can start it."}
+        </p>
+        <div className="vote-empty-actions">
+          {admin && deck.length >= 2 && (
+            <Button pill size="lg" onClick={() => startVoting(id)}>
+              Start Voting
+            </Button>
+          )}
+          {admin && deck.length < 2 && (
+            <LinkButton to={`/lobby/${id}/customize`} pill size="lg">
+              <PlusCircle size={16} /> Add options
+            </LinkButton>
+          )}
+          <LinkButton to={`/lobby/${id}`} pill size="lg" variant="soft">
+            Back to Lobby
+          </LinkButton>
+        </div>
+      </div>
+    );
+  }
 
   if (deck.length < 2) {
     return (
@@ -135,6 +179,7 @@ export function Vote() {
       {!done && card ? (
         <>
           <p className="vote-progress" aria-live="polite">
+            {lobby.runoff && <em className="round-tag">Runoff</em>}
             <span>{index + 1}</span> of {deck.length}
             <span className="dots" aria-hidden>
               {deck.slice(0, 14).map((c) => (
@@ -176,7 +221,7 @@ export function Vote() {
             </div>
           </div>
           <div className="vote-controls">
-            <button type="button" className="vc vc-sm" aria-label="Undo last vote (Z)" onClick={() => undoVote(id)} disabled={index === 0}>
+            <button type="button" className="vc vc-sm" aria-label="Undo last vote (Z)" onClick={() => undoVote(key)} disabled={index === 0}>
               <Undo2 size={16} />
             </button>
             <button type="button" className="vc vc-no" aria-label="Pass (Left arrow)" onClick={() => commit("nope")}>
@@ -195,9 +240,11 @@ export function Vote() {
           <p className="eyebrow muted">You've voted on all {deck.length} options</p>
           <div className="vote-done-actions">
             <Button onClick={() => setCelebrate(true)}>See results</Button>
-            <Button variant="soft" onClick={() => resetVotes(id)}>
-              Vote again
-            </Button>
+            {(!IS_BACKEND || (!lobby.revealed && doneMembers(lobby, deck, answers).length < lobby.members.length)) && (
+              <Button variant="soft" onClick={() => resetVotes(key)}>
+                {IS_BACKEND ? "Change my votes" : "Vote again"}
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -220,6 +267,11 @@ export function Vote() {
               {card.price && <div><dt>Price</dt><dd>{card.price}</dd></div>}
             </dl>
             {card.note && <p>{card.note}</p>}
+            {card.url && (
+              <a className="info-link" href={card.url} target="_blank" rel="noopener noreferrer">
+                Open link <ExternalLink size={13} />
+              </a>
+            )}
             <Button block onClick={() => setInfo(false)} data-autofocus>
               Got it
             </Button>
@@ -233,92 +285,20 @@ export function Vote() {
             <span className="pulse" />
             <PartyPopper size={34} />
           </span>
-          <h3>Everyone has voted!</h3>
-          <p>The numbers are in. Ready to see which option came out on top?</p>
+          <h3>{IS_BACKEND ? "You're done voting!" : "Everyone has voted!"}</h3>
+          <p>{IS_BACKEND ? "Results appear once everyone has finished — or when the host reveals them." : "The numbers are in. Ready to see which option came out on top?"}</p>
           <Button size="lg" pill onClick={() => nav(`/session/${id}/result`)} data-autofocus>
-            Reveal the Match
+            {IS_BACKEND ? "See results" : "Reveal the Match"}
           </Button>
           <div className="cel-people">
             <AvatarStack avatars={others.length ? others.map((m) => m.avatar!) : [av(2)]} size={26} />
-            <small>
-              All {voters} group {voters === 1 ? "member" : "members"} voted
-            </small>
+            <small>{IS_BACKEND ? `${voters} in the lobby` : `All ${voters} group ${voters === 1 ? "member" : "members"} voted`}</small>
           </div>
           <Link to={`/lobby/${id}`} className="link-inline" onClick={() => setCelebrate(false)}>
             Back to lobby
           </Link>
         </div>
       </Modal>
-    </div>
-  );
-}
-
-export function Result() {
-  const { id = "" } = useParams();
-  const lobby = useStore((s) => s.lobbies[id]);
-  const vote = useStore((s) => s.votes[id]);
-  const resetVotes = useStore((s) => s.resetVotes);
-  const nav = useNavigate();
-  const deck = useMemo(() => buildDeck(lobby), [lobby]);
-
-  if (!lobby || !isMember(lobby)) return <Navigate to="/groups" replace />;
-  const answered = vote ? deck.filter((c) => vote.answers[c.id]).length : 0;
-  if (!vote || deck.length < 2 || answered < deck.length) return <Navigate to={`/session/${id}/vote`} replace />;
-
-  const r = computeResult(deck, vote.answers, lobby.members, lobby.requiredMatch);
-  if (!r.winner) return <Navigate to={`/session/${id}/vote`} replace />;
-  const youLiked = vote.answers[r.winner.id] === "like";
-
-  return (
-    <div className="result">
-      <span className={`pill pill-lg ${r.matched ? "pill-yellow" : "pill-gray"}`}>
-        <PartyPopper size={15} /> {r.unanimous ? "IT'S A UNANIMOUS MATCH!" : r.matched ? "THE GROUP HAS A MATCH!" : "NO FULL MATCH — CLOSEST PICK"}
-      </span>
-      <h1>{r.matched ? "The Group Has Spoken" : "Closest to a Match"}</h1>
-      <div className="result-card">
-        <CardFace item={r.winner} />
-      </div>
-      <p className="result-note">
-        {r.likes} of {r.voters} {r.voters === 1 ? "person" : "people"} picked this ({r.pct}%)
-        {r.matched ? "" : ` — you needed ${lobby.requiredMatch}%`}
-        {youLiked ? "" : " — you passed, but the group leaned in"}.
-      </p>
-
-      <section className="ranking card" aria-label="All results">
-        <h3>How everyone voted</h3>
-        <ol>
-          {r.ranked.map(({ item, likes }, i) => (
-            <li key={item.id} className={i === 0 ? "top" : ""}>
-              <span className="rk-n">{i + 1}</span>
-              <ItemThumb item={item} size={34} round={false} />
-              <span className="rk-title">{item.title}</span>
-              <span className="rk-bar" aria-hidden>
-                <i style={{ width: `${(likes / r.voters) * 100}%` }} />
-              </span>
-              <span className="rk-count">
-                {likes}/{r.voters}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <div className="result-actions">
-        <Button pill size="lg" onClick={() => nav(`/lobby/${id}`)}>
-          Back to Lobby
-        </Button>
-        <Button
-          pill
-          size="lg"
-          variant="soft"
-          onClick={() => {
-            resetVotes(id);
-            nav(`/session/${id}/vote`);
-          }}
-        >
-          Vote again
-        </Button>
-      </div>
     </div>
   );
 }
