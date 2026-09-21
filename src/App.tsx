@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useStore } from "./store/useStore";
 import { IS_BACKEND } from "./backend/config";
@@ -7,18 +7,35 @@ import { useBackend } from "./backend/status";
 import { startWatchers } from "./lib/events";
 import { Button } from "./components/ui/ui";
 import { AppShell } from "./components/layout/Layout";
-import { Login, Signup } from "./pages/Auth";
 import { Home } from "./pages/Home";
-import { Invite, Join } from "./pages/Join";
-import { CreateLobby } from "./pages/Create";
-import { LobbyPage } from "./pages/Lobby";
-import { Customize } from "./pages/Customize";
-import { Vote } from "./pages/Vote";
-import { Result } from "./pages/Result";
-import { Notifications } from "./pages/Notifications";
-import { Settings } from "./pages/Settings";
-import { Groups } from "./pages/Groups";
-import { About, Activity, Faq, NotFound, Privacy, Security, Support, Visibility } from "./pages/Extra";
+
+// Route-level code splitting: only the page being opened is downloaded and parsed.
+const Login = lazy(() => import("./pages/Auth").then((m) => ({ default: m.Login })));
+const Signup = lazy(() => import("./pages/Auth").then((m) => ({ default: m.Signup })));
+const Invite = lazy(() => import("./pages/Join").then((m) => ({ default: m.Invite })));
+const Join = lazy(() => import("./pages/Join").then((m) => ({ default: m.Join })));
+const CreateLobby = lazy(() => import("./pages/Create").then((m) => ({ default: m.CreateLobby })));
+const LobbyPage = lazy(() => import("./pages/Lobby").then((m) => ({ default: m.LobbyPage })));
+const Customize = lazy(() => import("./pages/Customize").then((m) => ({ default: m.Customize })));
+const Vote = lazy(() => import("./pages/Vote").then((m) => ({ default: m.Vote })));
+const Result = lazy(() => import("./pages/Result").then((m) => ({ default: m.Result })));
+const Notifications = lazy(() => import("./pages/Notifications").then((m) => ({ default: m.Notifications })));
+const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
+const Groups = lazy(() => import("./pages/Groups").then((m) => ({ default: m.Groups })));
+const About = lazy(() => import("./pages/Extra").then((m) => ({ default: m.About })));
+const Activity = lazy(() => import("./pages/Extra").then((m) => ({ default: m.Activity })));
+const Faq = lazy(() => import("./pages/Extra").then((m) => ({ default: m.Faq })));
+const NotFound = lazy(() => import("./pages/Extra").then((m) => ({ default: m.NotFound })));
+const Privacy = lazy(() => import("./pages/Extra").then((m) => ({ default: m.Privacy })));
+const Security = lazy(() => import("./pages/Extra").then((m) => ({ default: m.Security })));
+const Support = lazy(() => import("./pages/Extra").then((m) => ({ default: m.Support })));
+const Visibility = lazy(() => import("./pages/Extra").then((m) => ({ default: m.Visibility })));
+
+const Loading = () => (
+  <div className="page-loading" role="status" aria-label="Loading">
+    <span className="boot-spin" aria-hidden />
+  </div>
+);
 
 function ThemeSync() {
   const theme = useStore((s) => s.theme);
@@ -88,8 +105,8 @@ export default function App() {
       <BootGate>
         <RecoveryRedirect />
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+        <Route path="/login" element={<Suspense fallback={<Loading />}><Login /></Suspense>} />
+        <Route path="/signup" element={<Suspense fallback={<Loading />}><Signup /></Suspense>} />
 
         <Route element={<AppShell />}>
           <Route path="/" element={<Home />} />

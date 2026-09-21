@@ -1,4 +1,4 @@
-import jsQR from "jsqr";
+// jsqr is loaded on first scan so it stays out of the main bundle.
 
 export type ScanTarget = { kind: "id"; value: string } | { kind: "code"; value: string };
 
@@ -13,7 +13,8 @@ export function parseScan(text: string): ScanTarget | null {
 }
 
 /** Decodes a QR code from raw pixels, or returns null. */
-export function decodeQr(data: Uint8ClampedArray, width: number, height: number): string | null {
+export async function decodeQr(data: Uint8ClampedArray, width: number, height: number): Promise<string | null> {
+  const { default: jsQR } = await import("jsqr");
   return jsQR(data, width, height, { inversionAttempts: "attemptBoth" })?.data ?? null;
 }
 

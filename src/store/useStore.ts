@@ -253,22 +253,43 @@ const patchLobby = (s: State, id: string, fn: (l: Lobby) => Lobby): Partial<Stat
 const orderOf = (i: LobbyItem) => i.pos ?? i.addedAt;
 export const sortedItems = (items: LobbyItem[]) => [...items].sort((a, b) => orderOf(a) - orderOf(b) || a.addedAt - b.addedAt);
 
-const safeStorage = {
-  getItem: (k: string) => {
-    try {
-      return localStorage.getItem(k);
-    } catch {
-      return null;
-    }
-  },
-  setItem: (k: string, v: string) => {
+/**
+ * localStorage writes are synchronous and the whole store is serialised on every change, which janks phones.
+ * Coalesce them: write the latest value shortly after the last change, and flush when the tab is hidden/closed.
+ */
+const pending = new Map<string, string>();
+let timer: ReturnType<typeof setTimeout> | undefined;
+const flush = () => {
+  clearTimeout(timer);
+  timer = undefined;
+  for (const [k, v] of pending) {
     try {
       localStorage.setItem(k, v);
     } catch {
       /* storage full or blocked — state stays in memory */
     }
+  }
+  pending.clear();
+};
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flush);
+  document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && flush());
+}
+
+const safeStorage = {
+  getItem: (k: string) => {
+    try {
+      return pending.get(k) ?? localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (k: string, v: string) => {
+    pending.set(k, v);
+    timer ??= setTimeout(flush, 400);
   },
   removeItem: (k: string) => {
+    pending.delete(k);
     try {
       localStorage.removeItem(k);
     } catch {

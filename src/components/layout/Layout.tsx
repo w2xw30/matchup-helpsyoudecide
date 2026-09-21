@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Bell, Compass, Globe, LogIn, LogOut, Mail, Moon, Plus, Settings, Share2, Sun, UserRound, Users } from "lucide-react";
 import { useStore } from "../../store/useStore";
@@ -204,7 +204,17 @@ export function AppShell({ children, wide }: { children?: ReactNode; wide?: bool
   return (
     <div className="page">
       <Navbar />
-      <main className={`page-main ${wide ? "wide" : ""}`}>{children ?? <Outlet />}</main>
+      <main className={`page-main ${wide ? "wide" : ""}`}>
+        <Suspense
+          fallback={
+            <div className="page-loading" role="status" aria-label="Loading">
+              <span className="boot-spin" aria-hidden />
+            </div>
+          }
+        >
+          {children ?? <Outlet />}
+        </Suspense>
+      </main>
       <Footer />
       <BottomNav />
       <LogoutHost />

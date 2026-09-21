@@ -54,21 +54,28 @@ function ScanBody({ onClose, onTarget }: { onClose: () => void; onTarget: (t: Sc
         await v.play().catch(() => undefined);
         setMsg("Point the camera at the QR code");
         let last = 0;
+        let decoding = false;
         const tick = (now: number) => {
           if (stopped) return;
           raf = requestAnimationFrame(tick);
-          if (now - last < 160 || !v.videoWidth || !ctx) return;
+          if (decoding || now - last < 160 || !v.videoWidth || !ctx) return;
           last = now;
           const scale = Math.min(1, 520 / Math.max(v.videoWidth, v.videoHeight));
           canvas.width = Math.round(v.videoWidth * scale);
           canvas.height = Math.round(v.videoHeight * scale);
           ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
           const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const text = decodeQr(img.data, canvas.width, canvas.height);
-          if (text && parseScan(text)) {
-            stopped = true;
-            handle(text);
-          }
+          decoding = true;
+          void decodeQr(img.data, canvas.width, canvas.height)
+            .then((text) => {
+              if (!stopped && text && parseScan(text)) {
+                stopped = true;
+                handle(text);
+              }
+            })
+            .finally(() => {
+              decoding = false;
+            });
         };
         raf = requestAnimationFrame(tick);
       } catch (e) {

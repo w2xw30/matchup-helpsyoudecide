@@ -148,6 +148,12 @@ const modalStack: object[] = [];
 
 export function Modal({ open, onClose, children, label }: { open: boolean; onClose: () => void; children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Callers pass inline lambdas; keep the latest in a ref so re-renders don't re-run the effect below
+  // (which would re-focus the first control and drop the mobile keyboard mid-typing).
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
@@ -155,7 +161,7 @@ export function Modal({ open, onClose, children, label }: { open: boolean; onClo
     modalStack.push(token);
     const onKey = (e: KeyboardEvent) => {
       if (modalStack[modalStack.length - 1] !== token) return; // only the top-most modal reacts
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") closeRef.current();
       if (e.key === "Tab" && ref.current) {
         const f = ref.current.querySelectorAll<HTMLElement>("button, a[href], input, [tabindex]:not([tabindex='-1'])");
         if (!f.length) return;
@@ -179,7 +185,7 @@ export function Modal({ open, onClose, children, label }: { open: boolean; onClo
       if (modalStack.length === 0) document.body.style.overflow = "";
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

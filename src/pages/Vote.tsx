@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Check, ExternalLink, Info, PartyPopper, PlusCircle, Star, Undo2, X } from "lucide-react";
 import { av, type LobbyItem } from "../data/mock";
@@ -71,9 +71,13 @@ export function Vote() {
   const card = answers ? deck.find((c) => !answers[c.id]) : deck[0];
   const next = deck.find((c) => c !== card && !(answers && answers[c.id]));
 
-  const [dx, setDx] = useState(0);
-  const [dragging, setDragging] = useState(false);
+  // The card follows the finger via direct DOM writes; React state only changes when the stamp direction flips.
+  const [dir, setDir] = useState<"like" | "nope" | null>(null);
   const [exit, setExit] = useState<"like" | "nope" | null>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+  const dxRef = useRef(0);
+  const dragging = useRef(false);
+  const frame = useRef(0);
   const [info, setInfo] = useState(false);
   const [dismissedAt, setDismissedAt] = useState(-1);
   const celebrate = done && dismissedAt !== index;
@@ -81,21 +85,53 @@ export function Vote() {
   const start = useRef(0);
   const busy = useRef(false);
 
+  const paint = useCallback((x: number, animate: boolean) => {
+    const el = topRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 0.26s ease, opacity 0.26s ease" : "none";
+    el.style.transform = `translate3d(${x}px, 0, 0) rotate(${x / 22}deg)`;
+  }, []);
+  const moveTo = useCallback(
+    (x: number) => {
+      dxRef.current = x;
+      const d = x > 40 ? "like" : x < -40 ? "nope" : null;
+      setDir((cur) => (cur === d ? cur : d));
+      cancelAnimationFrame(frame.current);
+      frame.current = requestAnimationFrame(() => paint(x, false));
+    },
+    [paint],
+  );
+
   const commit = useCallback(
     (choice: "like" | "nope") => {
       if (!card || busy.current) return;
       busy.current = true;
-      setDragging(false);
+      dragging.current = false;
+      cancelAnimationFrame(frame.current);
       setExit(choice);
+      const off = choice === "like" ? 520 : -520;
+      paint(off, true);
+      if (topRef.current) topRef.current.style.opacity = "0";
       setTimeout(() => {
         castVote(key, card.id, choice);
         setExit(null);
-        setDx(0);
+        setDir(null);
+        dxRef.current = 0;
         busy.current = false;
       }, 260);
     },
-    [card, castVote, key],
+    [card, castVote, key, paint],
   );
+
+  // Once the next card is in the DOM, snap the (invisible) top card back to centre before it paints.
+  const cardId = card?.id;
+  useLayoutEffect(() => {
+    const el = topRef.current;
+    if (!el) return;
+    el.style.opacity = "";
+    el.style.transition = "none";
+    el.style.transform = "";
+  }, [cardId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -163,13 +199,7 @@ export function Vote() {
     );
   }
 
-  const dir = exit ?? (dx > 40 ? "like" : dx < -40 ? "nope" : null);
-  const x = exit === "like" ? 520 : exit === "nope" ? -520 : dx;
-  const cardStyle = {
-    transform: `translateX(${x}px) rotate(${x / 22}deg)`,
-    transition: dragging ? "none" : "transform 0.26s ease, opacity 0.26s ease",
-    opacity: exit ? 0 : 1,
-  };
+  const stamp = exit ?? dir;
 
   const voters = lobby.members.length;
   const others = lobby.members.filter((m) => m.avatar).slice(0, 4);
@@ -195,29 +225,36 @@ export function Vote() {
             )}
             <div
               className="deck-top"
-              style={cardStyle}
+              ref={topRef}
               onPointerDown={(e) => {
                 if (busy.current) return;
                 (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-                start.current = e.clientX - dx;
-                setDragging(true);
+                start.current = e.clientX - dxRef.current;
+                dragging.current = true;
               }}
-              onPointerMove={(e) => dragging && setDx(e.clientX - start.current)}
+              onPointerMove={(e) => dragging.current && moveTo(e.clientX - start.current)}
               onPointerUp={() => {
-                if (!dragging) return;
-                if (dx > THRESHOLD) commit("like");
-                else if (dx < -THRESHOLD) commit("nope");
+                if (!dragging.current) return;
+                const x = dxRef.current;
+                if (x > THRESHOLD) commit("like");
+                else if (x < -THRESHOLD) commit("nope");
                 else {
-                  setDragging(false);
-                  setDx(0);
+                  dragging.current = false;
+                  dxRef.current = 0;
+                  setDir(null);
+                  cancelAnimationFrame(frame.current);
+                  paint(0, true);
                 }
               }}
               onPointerCancel={() => {
-                setDragging(false);
-                setDx(0);
+                dragging.current = false;
+                dxRef.current = 0;
+                setDir(null);
+                cancelAnimationFrame(frame.current);
+                paint(0, true);
               }}
             >
-              <CardFace item={card} stamp={dir} />
+              <CardFace item={card} stamp={stamp} />
             </div>
           </div>
           <div className="vote-controls">

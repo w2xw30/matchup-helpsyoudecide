@@ -117,3 +117,115 @@
 .wait-state { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3); }
 .wait-card li.done .wait-state { color: #1e8a6d; }
 [data-theme="dark"] .wait-card li.done .wait-state { color: #4fd1a5; }
+
+/* ---------- Phones: layout, touch and performance fixes ---------- */
+@media (max-width: 700px) {
+  /* iOS zooms the page when a focused field is under 16px, which looks like a broken layout */
+  input, textarea, select { font-size: 16px !important; }
+
+  .page-main { padding-top: 20px; }
+
+  /* Lobby header */
+  .lobby-wrap { gap: 20px; }
+  .lobby-top { flex-direction: column; align-items: stretch; gap: 14px; }
+  .lobby-title { gap: 14px; }
+  .lobby-title h1 { font-size: 24px; overflow-wrap: anywhere; }
+  .lobby-title p { font-size: 13px; }
+  .lobby-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 0; }
+  .lobby-tools .btn { width: 100%; height: 42px; padding-left: 10px; padding-right: 10px; }
+  .decision-banner { padding: 12px 14px; gap: 12px; }
+  .decision-banner .db-text { min-width: 0; flex-basis: calc(100% - 60px); }
+
+  /* Waiting-room cards */
+  .lobby-page { gap: 16px; }
+  .lobby-left { gap: 16px; }
+  .readiness { padding: 24px 20px 26px; }
+  .ready-count { margin: 28px 0 24px; }
+  .ready-count span { font-size: 48px; }
+  .readiness p { max-width: 280px; font-size: 17px; margin-bottom: 20px; }
+  .readiness .btn { width: 100%; max-width: 320px; }
+  .session-details { padding: 20px; }
+  .sd-row strong { font-size: 15px; }
+  .lobby-right h2 { font-size: 22px; }
+  .lobby-right .section-head { margin-bottom: 12px; }
+  .squad-grid { gap: 10px; }
+  .member-card { gap: 14px; padding: 14px 16px; border-radius: 16px; }
+  .member-card small { font-size: 10px; }
+  .invite-tile { padding: 12px 16px; }
+  .chat { margin-top: 16px; padding: 20px 18px 18px; }
+  .chat-log { max-height: 160px; }
+  .invite-link { margin-top: 8px; }
+  .copy-field { max-width: 100%; padding: 6px 6px 6px 16px; }
+  .copy-field span { min-width: 0; flex: 1; }
+  .copy-field .btn { flex: none; }
+
+  /* Sheets become bottom sheets so long forms scroll inside the screen */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal { width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 24px 24px 0 0; animation: sheet-up 0.25s ease; }
+  .modal > .sheet, .modal > .celebrate, .modal > .info-card, .modal > .confirm-card { width: 100%; border-radius: 24px 24px 0 0; border-bottom: 0; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .share-grid { gap: 16px; }
+  .qr-box img, .qr-skeleton { width: min(200px, 56vw); height: min(200px, 56vw); }
+  .sheet-actions .btn, .confirm-actions .btn { min-height: 46px; }
+  .row-list li { flex-wrap: wrap; }
+
+  /* Swipe deck fits the screen */
+  .page-main:has(.vote-page), .page-main:has(.result) { padding-top: 16px; }
+  .deck { width: 100%; }
+  .sc-image { height: min(280px, 32dvh); }
+  .sc-body { padding: 18px 20px 22px; }
+  .sc-title h2 { font-size: 22px; }
+  .sc-body p { font-size: 15px; line-height: 1.55; }
+  .tags { margin-top: 14px; }
+  .vote-controls { margin-top: 24px; }
+  .vote-progress { margin-bottom: 14px; }
+
+  /* Other pages */
+  .hero-cta { width: 100%; }
+  .invite-card, .join-card { border-radius: 20px; }
+  .group-grid { grid-template-columns: minmax(0, 1fr); }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .stat-grid .tile { padding: 20px 14px; }
+  .g-search { max-width: none; flex-basis: 100%; }
+  .g-tools > * { min-width: 0; }
+  .contrib-head { flex-wrap: wrap; }
+  .page-head { align-items: flex-start; }
+  .page-head-actions { width: 100%; flex-wrap: wrap; }
+  .page-head-actions .btn { flex: 1; }
+  .prose { padding: 22px 18px; }
+  .footer-inner { padding-top: 40px; }
+  .chips { gap: 8px; }
+  .chip { padding: 8px 16px; font-size: 13px; }
+  .settings-head h1 { font-size: 28px; }
+  .s-card { padding: 18px 16px 20px; }
+  .doc { gap: 16px; }
+  .tpl-card { min-height: 0; padding: 20px; }
+  .tpl-create { padding-top: 12px; }
+}
+
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+@media (max-width: 380px) {
+  .nav { padding: 0 14px; }
+  .nav-right { gap: 12px; }
+  .lobby-tools { grid-template-columns: 1fr; }
+  .code-cell { width: 36px; height: 52px; font-size: 20px; }
+}
+
+/* ---------- Performance ---------- */
+/* Blur filters are the most expensive paint on phones; use a solid scrim there instead. */
+@media (max-width: 700px), (pointer: coarse) {
+  .modal-backdrop { backdrop-filter: none; background: rgba(20, 15, 35, 0.62); }
+  .chip-glass { backdrop-filter: none; }
+  .deck-top { will-change: transform; }
+  .deck-under { display: none; }
+}
+.deck-top { will-change: transform; backface-visibility: hidden; }
+.footer { content-visibility: auto; contain-intrinsic-size: auto 480px; }
+body { transition: none; }
+
+@media (max-width: 700px) {
+  .avatar-edit { justify-self: start; }
+  .qt-grid { gap: 10px; }
+  .qt-card { min-height: 96px; padding-top: 30px; }
+  .qt-card strong { margin-top: 24px; }
+}

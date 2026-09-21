@@ -374,11 +374,11 @@
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1000px) {
-  .home-grid { grid-template-columns: 1fr; }
-  .lobby-page { grid-template-columns: 1fr; }
-  .customize { grid-template-columns: 1fr; gap: 40px; }
+  .home-grid { grid-template-columns: minmax(0, 1fr); }
+  .lobby-page { grid-template-columns: minmax(0, 1fr); }
+  .customize { grid-template-columns: minmax(0, 1fr); gap: 40px; }
   .cz-side { padding-top: 0; }
-  .settings-grid { grid-template-columns: 1fr; }
+  .settings-grid { grid-template-columns: minmax(0, 1fr); }
   .feature-grid { grid-template-columns: 1fr; }
 }
 

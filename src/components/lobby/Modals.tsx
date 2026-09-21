@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import QRCode from "qrcode";
 import { Copy, Crown, Download, KeyRound, Mail, RefreshCw, Share2, ShieldCheck, UserMinus, X } from "lucide-react";
 import { LOBBY_KINDS, type LobbyKind } from "../../lib/catalog";
 import { isAdmin, isOwner, roleLabel } from "../../lib/perms";
@@ -45,7 +44,8 @@ function InviteBody({ lobby, onClose }: { lobby: Lobby; onClose: () => void }) {
 
   useEffect(() => {
     let cancelled = false;
-    QRCode.toDataURL(url, { width: 512, margin: 1, errorCorrectionLevel: "M", color: { dark: "#8f1f2b", light: "#ffffff" } })
+    import("qrcode")
+      .then((m) => m.default.toDataURL(url, { width: 512, margin: 1, errorCorrectionLevel: "M", color: { dark: "#8f1f2b", light: "#ffffff" } }))
       .then((d) => !cancelled && setQr(d))
       .catch(() => !cancelled && setQr(""));
     return () => {
